@@ -1,0 +1,12 @@
+services:
+  rize:
+    build: .
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/rize.sqlite
+    volumes:
+      - rize-data:/app/data
+volumes:
+  rize-data:

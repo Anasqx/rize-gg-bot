@@ -1,0 +1,21 @@
+{
+  "name": "rize-gg-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.17.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env index.js",
+    "test": "node --test",
+    "brand": "node brand.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.22.1"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.3"
+  },
+  "main": "index.js"
+}

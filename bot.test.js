@@ -1,0 +1,113 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Store } from './store.js';
+import { GAMES, READY_MS, REQUEST_MS, PING_MS } from './games.js';
+import { panel, ranks, gameMenu, requestView } from './ui.js';
+import { handle } from './handler.js';
+
+function fixture(t) {
+  let now=1_800_000_000_000;
+  const store=new Store(':memory:',()=>now);
+  t.after(()=>store.db.close());
+  return {store,advance:ms=>{now+=ms;}};
+}
+test('availability starts at selected time, expires at exact boundary, and renewal is bounded',t=>{
+  const {store:s,advance}=fixture(t);
+  s.register('u','rocket','2',30);
+  assert.equal(s.active().length,0);
+  advance(30*60_000);assert.equal(s.active().length,1);
+  advance(READY_MS);assert.equal(s.active().length,0);
+  assert.throws(()=>s.extend('u','rocket'));
+  s.register('u','rocket','3',0);const end=s.extend('u','rocket');
+  assert.equal(s.extend('u','rocket'),end);
+  s.sweep();assert.equal(s.mine('u').length,1);
+});
+test('matching filters game/rank/time/self, limits pings, and cooldown survives re-registration',t=>{
+  const {store:s,advance}=fixture(t);
+  for(let n=0;n<15;n++) s.register(`u${n}`,'valorant','2',0);
+  s.register('host','valorant','2',0);s.register('wrong','valorant','3',0);
+  s.register('later','valorant','2',60);s.register('other','rocket','2',0);
+  const r=s.create('host','valorant','2',4);
+  const candidates=s.candidates(r);assert.equal(candidates.length,10);
+  assert.ok(candidates.every(a=>a.user.startsWith('u')));
+  s.pinged('valorant',candidates.map(a=>a.user));
+  s.remove('u0','valorant');s.register('u0','valorant','2',0);
+  assert.equal(s.candidates(r).length,5);
+  advance(PING_MS);assert.equal(s.candidates(r).length,10);
+});
+test('joining consumes availability, rejects duplicates and overfill, leaving reopens',t=>{
+  const {store:s}=fixture(t);
+  const r=s.create('host','chess','any',1);s.publish(r.id,'message');
+  s.register('a','chess','1',0);s.register('b','chess','2',0);
+  assert.throws(()=>s.join(r.id,'host'));
+  assert.equal(s.join(r.id,'a').status,'full');
+  assert.equal(s.mine('a').length,0);
+  assert.throws(()=>s.join(r.id,'a'));assert.throws(()=>s.join(r.id,'b'));
+  assert.equal(s.leave(r.id,'a').status,'open');
+  assert.equal(s.join(r.id,'b').players.length,1);
+});
+test('wrong rank, future availability, expiry, owner cooldown and invalid inputs are rejected',t=>{
+  const {store:s,advance}=fixture(t);
+  const r=s.create('host','rocket','3',2);s.publish(r.id,'m');
+  s.register('a','rocket','2',0);s.register('b','rocket','3',30);
+  assert.throws(()=>s.join(r.id,'a'));assert.throws(()=>s.join(r.id,'b'));
+  assert.throws(()=>s.create('host','chess','any',1));s.close(r.id);
+  assert.throws(()=>s.create('host','chess','any',1));advance(300_000);
+  const r2=s.create('host','chess','any',1);s.publish(r2.id,'m2');
+  advance(REQUEST_MS);assert.throws(()=>s.join(r2.id,'a'));
+  s.sweep();assert.equal(s.request(r2.id).status,'expired');
+  assert.throws(()=>s.register('u','fake','1',0));
+  assert.throws(()=>s.register('u','rocket','999',0));
+  assert.throws(()=>s.register('u','rocket','1',-30));
+  assert.throws(()=>s.create('x','chess','any',2));
+});
+test('member departures remove availability and reopen or close their teams',t=>{
+  const {store:s}=fixture(t);const r=s.create('host','chess','any',1);s.publish(r.id,'m');
+  s.register('u','chess','1',0);s.join(r.id,'u');s.removeMember('u');
+  assert.equal(s.request(r.id).status,'open');s.removeMember('host');
+  assert.equal(s.request(r.id).status,'closed');
+});
+test('database survives restart with registrations and usable request IDs',()=>{
+  const dir=mkdtempSync(join(tmpdir(),'rize-test-'));const path=join(dir,'test.sqlite');
+  try {
+    let s=new Store(path);s.register('u','chess','1',0);
+    const r=s.create('host','chess','any',1);s.publish(r.id,'m');s.db.close();
+    s=new Store(path);assert.equal(s.active().length,1);assert.equal(s.join(r.id,'u').status,'full');s.db.close();
+  } finally {rmSync(dir,{recursive:true,force:true});}
+});
+test('Arabic Discord payloads serialize within component limits and count unique people',t=>{
+  const {store:s}=fixture(t);s.register('u','chess','1',0);s.register('u','rocket','1',0);
+  const p=panel(s);assert.match(p.components[0].toJSON().components[0].label,/١ جاهز/);
+  assert.ok(p.embeds[0].toJSON().description.length<4096);
+  for(const game of Object.keys(GAMES)) for(const mode of ['register','find']) {
+    assert.ok(ranks(mode,game).toJSON().components[0].options.length<=25);
+  }
+  assert.equal(gameMenu('register',s).toJSON().components[0].options.length,4);
+  const r=s.create('host','chess','any',1);
+  assert.equal(requestView({...r,status:'open'}).components[0].toJSON().components.length,4);
+});
+test('button workflow registers, publishes with controlled mentions, joins, and protects closure',async t=>{
+  const {store:s}=fixture(t);let sent;let output;
+  const match={id:'chat',send:async p=>{sent=p;return{id:'message',url:'https://discord.com/channels/g/chat/message'};}};
+  const ctx={store:s,match,syncRequest:async()=>{}};
+  const i=(user,customId,values)=>({user:{id:user},customId,values,guildId:'g',channelId:'chat',message:{id:'message'},memberPermissions:{has:()=>false},editReply:async p=>{output=p;}});
+  await handle(i('u','game:register',['chess']),ctx);assert.equal(output.components.length,2);
+  await handle(i('u','rank:register:chess',['1']),ctx);
+  await handle(i('u','time:chess:1',['0']),ctx);assert.equal(s.active('chess').length,1);
+  await handle(i('host','size:chess:any',['1']),ctx);assert.match(output.content,/راجع طلبك/);
+  await handle(i('host','publish:chess:any:1'),ctx);
+  assert.deepEqual(sent.allowedMentions,{parse:[],users:['u']});
+  const r=s.recent()[0];
+  await assert.rejects(()=>handle(i('stranger',`close:${r.id}`),ctx));
+  await handle(i('u',`decline:${r.id}`),ctx);assert.equal(s.active('chess').length,1);
+  await handle(i('u',`join:${r.id}`),ctx);assert.equal(s.request(r.id).status,'full');
+  await handle(i('host',`close:${r.id}`),ctx);assert.equal(s.request(r.id).status,'closed');
+});
+test('failed Discord publish leaves no open request or consumed availability',async t=>{
+  const {store:s}=fixture(t);s.register('host','chess','1',0);
+  await assert.rejects(()=>handle({user:{id:'host'},customId:'publish:chess:any:1',editReply:async()=>{}},{store:s,match:{send:async()=>{throw Error('network');}}}));
+  assert.equal(s.openFor('host'),undefined);assert.equal(s.active().length,1);
+});

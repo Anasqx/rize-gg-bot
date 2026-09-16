@@ -1,5 +1,6 @@
 import { Client, Events, GatewayIntentBits, MessageFlags, PermissionFlagsBits, ChannelType } from 'discord.js';
-import { fileURLToPath } from 'node:url';
+import { visualPayload, liveImage } from './visual.js';
+import { GAMES } from './games.js';
 import { Store } from './store.js';
 import { panel, MARKER, requestView } from './ui.js';
 import { handle } from './handler.js';
@@ -16,7 +17,6 @@ const store = new Store(env.DATABASE_PATH || './data/rize.sqlite');
 if (store.get('guild') && store.get('guild') !== env.GUILD_ID) throw Error('This database belongs to another server. Use a different database path.');
 store.set('guild',env.GUILD_ID);
 const demo = new DemoRewards(store);
-const logo = fileURLToPath(new URL('./lfg-banner.png',import.meta.url));
 let guild, showcase, match, panelMessage, lastPanel, timer, initialized = false;
 const synced = new Map();
 let queue = Promise.resolve();
@@ -28,7 +28,7 @@ async function syncRequest(r) {
   const payload = requestView(r);
   const signature = JSON.stringify(payload);
   if (synced.get(r.id) === signature) return;
-  try { await match.messages.edit(r.message,payload); synced.set(r.id,signature); }
+  try { await match.messages.edit(r.message,await visualPayload(payload,guild)); synced.set(r.id,signature); }
   catch(error) {
     if (error.code===10008) {
       store.close(r.id);
@@ -43,9 +43,10 @@ async function refreshPanel() {
   const signature = JSON.stringify(payload);
   if (lastPanel===signature && panelMessage) return;
   try {
-    if (panelMessage) await panelMessage.edit({...payload,...(!lastPanel || !panelMessage.attachments.some(a=>a.name==='lfg-banner.png') ? {attachments:[],files:[{attachment:logo,name:'lfg-banner.png'}]} : {})});
+    const rendered={...payload,content:'',embeds:[{image:{url:'attachment://live-lfg.png'}}],attachments:[],files:[{attachment:await liveImage(store,GAMES),name:'live-lfg.png'}]};
+    if(panelMessage) await panelMessage.edit(rendered);
     else {
-      panelMessage=await showcase.send({...payload,files:[{attachment:logo,name:'lfg-banner.png'}]});
+      panelMessage=await showcase.send(rendered);
       store.set('panel',panelMessage.id); store.set('panel_channel',showcase.id);
     }
     lastPanel=signature;
@@ -90,7 +91,7 @@ async function initialize() {
   }
   if(!panelMessage) {
     const history=await showcase.messages.fetch({limit:100});
-    panelMessage=history.find(m=>m.author.id===client.user.id && m.embeds.some(e=>[MARKER,'Rize.gg • لقّط تيمك'].includes(e.footer?.text))) ?? null;
+    panelMessage=history.find(m=>m.author.id===client.user.id && (m.attachments.some(a=>a.name==='live-lfg.png') || m.embeds.some(e=>[MARKER,'Rize.gg • لقّط تيمك'].includes(e.footer?.text)))) ?? null;
     if(panelMessage) {store.set('panel',panelMessage.id);store.set('panel_channel',showcase.id);}
   }
   await tick();
@@ -106,15 +107,20 @@ client.on(Events.InteractionCreate,async i=>{
   if(!i.isButton() && !i.isStringSelectMenu()) return;
   if(i.guildId!==env.GUILD_ID || i.user.bot) return;
   try {
-    if(!initialized) {await i.reply({content:'Starting up. Try again in a moment.',flags:MessageFlags.Ephemeral});return;}
+    if(!initialized) {await i.reply({...await visualPayload({content:'Starting up. Try again in a moment.'},guild),flags:MessageFlags.Ephemeral});return;}
     if(i.message.flags.has(MessageFlags.Ephemeral)) await i.deferUpdate();
     else await i.deferReply({flags:MessageFlags.Ephemeral});
     await enqueue(async()=>{
-      try {if(i.customId.startsWith('demo:')) await handleDemo(i,demo); else await handle(i,{store,match,syncRequest});}
+      try {
+        const screen=new Proxy(i,{get(target,key){if(key==='editReply')return async payload=>target.editReply(await visualPayload(payload,guild));return Reflect.get(target,key,target);}});
+        const chat={id:match.id,send:async payload=>match.send(await visualPayload(payload,guild))};
+        if(i.customId.startsWith('demo:')) await handleDemo(screen,demo); else await handle(screen,{store,match:chat,syncRequest});
+        await refreshPanel();
+      }
       catch(error) {
         const expected=error.userFacing === true;
         if(!expected) log(error);
-        await i.editReply({content:expected?error.message:'Something went wrong. Try again, or contact a moderator if it continues.',embeds:[],components:[],allowedMentions:{parse:[]}});
+        await i.editReply(await visualPayload({content:expected?error.message:'Something went wrong. Try again, or contact a moderator if it continues.',embeds:[],components:[],allowedMentions:{parse:[]}},guild));
       }
     });
   } catch(error) {log(error);}

@@ -1,3 +1,4 @@
+import { visualPayload } from './visual.js';
 import { userError } from './errors.js';
 import { fileURLToPath } from 'node:url';
 import { randomInt } from 'node:crypto';
@@ -48,9 +49,9 @@ export async function ensureDemoPanel(channel,client,store) {
   if(id) {try {message=await channel.messages.fetch(id);}catch(error){if(error.code!==10008) throw error;}}
   if(!message) {
     const history=await channel.messages.fetch({limit:100});
-    message=history.find(m=>m.author.id===client.user.id && m.embeds.some(e=>[DEMO_MARKER,'Rize.gg • تجربة المكافآت'].includes(e.footer?.text)));
+    message=history.find(m=>m.author.id===client.user.id && (m.attachments.some(a=>a.name==='wheel.png') || m.embeds.some(e=>[DEMO_MARKER,'Rize.gg • تجربة المكافآت'].includes(e.footer?.text))));
   }
-  const payload={...demoPanel(),attachments:[],files:[asset('wheel.png')]};
+  const payload=await visualPayload({...demoPanel(),attachments:[],files:[asset('wheel.png')]},channel.guild);
   if(message) await message.edit(payload);else message=await channel.send(payload);
   store.set(key,message.id);
   console.log('Rize.gg: Rewards demo panel sent.');

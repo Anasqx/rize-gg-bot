@@ -12,10 +12,9 @@
     "brand": "node brand.js"
   },
   "dependencies": {
-    "discord.js": "^14.22.1"
-  },
-  "devDependencies": {
+    "discord.js": "^14.22.1",
     "sharp": "^0.34.3"
   },
+  "devDependencies": {},
   "main": "index.js"
 }

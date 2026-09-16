@@ -172,3 +172,17 @@ test('English prize history keeps existing balances and outcomes',async t=>{
  assert.equal(p.tickets,2);assert.equal(p.activity,250);assert.equal(p.bonus,100);
  assert.match(p.wins[0].label,/Special role/);assert.equal(d.spin('u','old').key,'role');assert.equal(d.profile('u').tickets,2);
 });
+
+test('visual replies contain images and buttons with functional links, no prose',async()=>{
+ const {visualPayload}=await import('./visual.js');
+ const payload=await visualPayload({content:'Choose a game\n[Open team](https://discord.com/channels/1/2/3)',components:[]});
+ assert.equal(payload.content,'');assert.equal(payload.embeds[0].toJSON().description,undefined);
+ assert.equal(payload.components[0].toJSON().components[0].url,'https://discord.com/channels/1/2/3');
+ assert.ok(Buffer.isBuffer(payload.files[0].attachment));
+});
+test('live count image changes on registration and returns after removal',async t=>{
+ const {liveImage}=await import('./visual.js');const {GAMES}=await import('./games.js');const {store}=fixture(t);
+ const empty=await liveImage(store,GAMES);store.register('u','rocket','0',0);
+ const ready=await liveImage(store,GAMES);assert.notDeepEqual(ready,empty);
+ store.remove('u','rocket');assert.deepEqual(await liveImage(store,GAMES),empty);
+});

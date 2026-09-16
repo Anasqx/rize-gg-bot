@@ -20,7 +20,7 @@ export async function handle(i, ctx) {
     if(action==='quickfind') return handle({...i,customId:`publish:${a}:any:1`,editReply:i.editReply.bind(i)},ctx);
     if(action==='options') return reply('Rank and time are optional. Choose your rank to update your availability.',[ranks('register',a),row(button(`gamefind:${a}`,'Choose rank and team size'),button(`pick:${a}`,'Back'))]);
     const links=store.recent().filter(r=>r.game===a && r.status==='open' && r.expires>store.now()).slice(-3).map(r=>`[Join a team](https://discord.com/channels/${i.guildId}/${match.id}/${r.message})`).join(' · ');
-    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\n${links || 'Get notified or find a teammate.'}\nReady for 2 hours, with mentions. Quick request: 1 player, any rank.`,[row(button(`ready:${a}`,'Ready to play',ButtonStyle.Success),button(`quickfind:${a}`,'Find 1 player',ButtonStyle.Primary)),row(button(`options:${a}`,'Options'),button('home','Back'))]);
+    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\nReady to play: get mentioned when a team needs you, for 2 hours.\nFind 1 player: post a request for any rank.\nOptions: change your rank or availability.\n${links}`,[row(button(`ready:${a}`,'Ready to play',ButtonStyle.Success),button(`quickfind:${a}`,'Find 1 player',ButtonStyle.Primary)),row(button(`options:${a}`,'Options'),button('home','Back'))]);
   }
   if(action==='gamefind') {if(!GAMES[a]) throw userError('Invalid selection.');return reply('Choose a rank for your request.',[ranks('find',a),home()]);}
   if(action==='cancelReq' || action==='leaveReq') {

@@ -37,10 +37,10 @@ export class DemoRewards {
   }
 }
 const asset=name=>({attachment:fileURLToPath(new URL(`./${name}`,import.meta.url)),name});
-const controls=()=>[row(button('demo:wheel','🎡 Spin the wheel',ButtonStyle.Success),button('demo:profile','My balance'))];
+const controls=()=>[row(button('demo:wheel','Spin the wheel',ButtonStyle.Success),button('demo:profile','My balance'))];
 const privateControls=()=>[...controls(),row(button('demo:xp','Try adding XP'),button('demo:reset','Reset demo'))];
 export function demoPanel() {
-  return {embeds:[embed('🎡 Rize.gg Prize Wheel','3 demo tickets to start · 1 ticket per spin\n**Demo only — no real money or roles awarded.**').setImage('attachment://wheel.png')
+  return {embeds:[embed('Rize.gg Rewards','3 demo tickets to start · 1 ticket per spin\n**Demo only — no real money or roles awarded.**').setImage('attachment://wheel.png')
     .setFooter({text:DEMO_MARKER})],components:controls(),allowedMentions:{parse:[]}};
 }
 export async function ensureDemoPanel(channel,client,store) {

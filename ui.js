@@ -28,7 +28,7 @@ export function size(game, rank) {
 export const gameButtons = store => row(...Object.entries(GAMES).map(([key,g])=>button(`pick:${key}`,`${g.emoji} ${g.name} · ${ar(store.active(key).length)}`)));
 export function panel(store) {
   const total = new Set(store.active().map(a=>a.user)).size;
-  return {embeds:[embed('🎮 Just pick a game','Get notified or find a teammate.').setImage('attachment://lfg-banner.png')],
+  return {embeds:[embed('Find your team','Choose a game below, then get notified or find a player.\nThe number beside each game shows players ready now.').setImage('attachment://lfg-banner.png')],
     components:[gameButtons(store),row(button('games',`Games · ${ar(total)} ready`),button('mine','My status'))],allowedMentions:{parse:[]}};
 }
 export function requestView(r) {

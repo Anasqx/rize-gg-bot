@@ -1,3 +1,4 @@
+import { userError } from './errors.js';
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
@@ -22,7 +23,7 @@ export class Store {
   get(key) { return this.db.prepare('SELECT value FROM meta WHERE key=?').get(key)?.value; }
   set(key, value) { this.db.prepare('INSERT OR REPLACE INTO meta VALUES (?,?)').run(key, value); }
   register(user, game, rank, delay) {
-    if (!validateGameRank(game, rank) || ![0, 30, 60, 120].includes(delay)) throw Error('اختيار غير صالح. ارجع للوحة وجرّب من جديد.');
+    if (!validateGameRank(game, rank) || ![0, 30, 60, 120].includes(delay)) throw userError('Invalid selection. Open the panel and try again.');
     const start = this.now() + delay * 60_000;
     this.db.prepare(`INSERT INTO availability(user,game,rank,start,end) VALUES(?,?,?,?,?)
       ON CONFLICT(user,game) DO UPDATE SET rank=excluded.rank,start=excluded.start,end=excluded.end`).run(user, game, rank, start, start + READY_MS);
@@ -33,7 +34,7 @@ export class Store {
   remove(user, game) { this.db.prepare('DELETE FROM availability WHERE user=? AND game=?').run(user, game); }
   extend(user, game) {
     const row = this.mine(user).find(a => a.game === game);
-    if (!row) throw Error('انتهى تسجيلك. سجّل جاهزيتك من جديد.');
+    if (!row) throw userError('Your availability expired. Register again.');
     const end = Math.max(this.now(), row.start) + READY_MS;
     this.db.prepare('UPDATE availability SET end=? WHERE user=? AND game=?').run(end, user, game);
     return end;
@@ -45,10 +46,10 @@ export class Store {
   }
   openFor(user) { return this.db.prepare("SELECT id FROM requests WHERE owner=? AND status IN ('pending','open') AND expires>?").get(user, this.now()); }
   create(user, game, rank, needed) {
-    if (!validateGameRank(game, rank, true) || !Number.isInteger(needed) || needed < 1 || needed > GAMES[game].max) throw Error('اختيار غير صالح. ارجع للوحة وجرّب من جديد.');
-    if (this.openFor(user)) throw Error('عندك طلب مفتوح. أقفله أول من زر «طلباتي».');
+    if (!validateGameRank(game, rank, true) || !Number.isInteger(needed) || needed < 1 || needed > GAMES[game].max) throw userError('Invalid selection. Open the panel and try again.');
+    if (this.openFor(user)) throw userError('You have an open request. Close it from My status first.');
     const latest = this.db.prepare('SELECT created FROM requests WHERE owner=? ORDER BY created DESC LIMIT 1').get(user);
-    if (latest && this.now() - latest.created < COOLDOWN_MS) throw Error('انتظر خمس دقايق بين كل طلب وطلب، عشان ما نزعج اللاعبين.');
+    if (latest && this.now() - latest.created < COOLDOWN_MS) throw userError('Please wait 5 minutes between requests.');
     const id = randomUUID();
     this.db.prepare('INSERT INTO requests VALUES(?,?,?,?,?,?,?,?,?)').run(id, user, game, rank, needed, this.now(), this.now()+REQUEST_MS, 'pending', null);
     return this.request(id);
@@ -62,13 +63,13 @@ export class Store {
   pinged(game, users) { for (const user of users) this.db.prepare('INSERT OR REPLACE INTO pings VALUES(?,?,?)').run(user,game,this.now()); }
   join(id, user) {
     const r = this.request(id);
-    if (!r || r.status !== 'open' || r.expires <= this.now()) throw Error('هذا الطلب تقفّل أو انتهى وقته. تقدر تفتح طلب جديد من اللوحة.');
-    if (r.owner === user) throw Error('أنت صاحب الطلب، مكانك محسوب من البداية.');
-    if (r.players.includes(user)) throw Error('أنت منضم لهالطلب من قبل.');
-    if (r.players.length >= r.needed) throw Error('اكتمل الفريق.');
+    if (!r || r.status !== 'open' || r.expires <= this.now()) throw userError('This request is closed or expired. You can create a new one.');
+    if (r.owner === user) throw userError('You own this request. Your spot is already included.');
+    if (r.players.includes(user)) throw userError('You already joined this team.');
+    if (r.players.length >= r.needed) throw userError('This team is full.');
     const a = this.active(r.game).find(a => a.user === user);
-    if (!a && r.rank !== 'any') throw Error('سجّل جاهزيتك «الحين» لهاللعبة من اللوحة، وبعدها ارجع انضم.');
-    if (r.rank !== 'any' && a?.rank !== r.rank) throw Error('رتبتك المسجّلة ما تطابق رتبة هالطلب.');
+    if (!a && r.rank !== 'any') throw userError('Set your rank and availability for this game before joining a ranked request.');
+    if (r.rank !== 'any' && a?.rank !== r.rank) throw userError('Your registered rank does not match this request.');
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.prepare('INSERT INTO joins VALUES(?,?)').run(id,user);
@@ -80,14 +81,14 @@ export class Store {
   }
   decline(id, user) {
     const r = this.request(id);
-    if (!r || r.status !== 'open' || r.expires <= this.now()) throw Error('هذا الطلب انتهى.');
-    if (r.owner === user || r.players.includes(user)) throw Error('أنت ضمن الفريق بالفعل.');
+    if (!r || r.status !== 'open' || r.expires <= this.now()) throw userError('This request has ended.');
+    if (r.owner === user || r.players.includes(user)) throw userError('You are already part of this team.');
     this.db.prepare('INSERT OR IGNORE INTO declines VALUES(?,?)').run(id,user);
   }
   leave(id, user) {
     const r = this.request(id);
-    if (!r || !['open','full'].includes(r.status) || r.expires <= this.now()) throw Error('هذا الطلب انتهى.');
-    if (!r.players.includes(user)) throw Error('أنت مو منضم لهالطلب.');
+    if (!r || !['open','full'].includes(r.status) || r.expires <= this.now()) throw userError('This request has ended.');
+    if (!r.players.includes(user)) throw userError('You have not joined this team.');
     this.db.prepare('DELETE FROM joins WHERE request=? AND user=?').run(id,user);
     this.close(id,'open');
     return this.request(id);

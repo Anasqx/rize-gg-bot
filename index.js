@@ -7,13 +7,13 @@ import { DemoRewards, ensureDemoPanel, handleDemo } from './demo.js';
 
 const env = process.env;
 for (const key of ['DISCORD_TOKEN','GUILD_ID','PANEL_CHANNEL_ID','MATCH_CHANNEL_ID']) {
-  if (!env[key] || (key !== 'DISCORD_TOKEN' && !/^\d{17,20}$/.test(env[key]))) throw Error(`إعداد ناقص أو غير صالح: ${key}`);
+  if (!env[key] || (key !== 'DISCORD_TOKEN' && !/^\d{17,20}$/.test(env[key]))) throw Error(`Missing or invalid setting: ${key}`);
 }
-if (env.PANEL_CHANNEL_ID === env.MATCH_CHANNEL_ID) throw Error('اختر قناتين مختلفتين للوحة وشات اللعب.');
+if (env.PANEL_CHANNEL_ID === env.MATCH_CHANNEL_ID) throw Error('Use different channels for the panel and matchmaking chat.');
 const presence = env.ENABLE_PRESENCE === 'true';
 const client = new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,...(presence?[GatewayIntentBits.GuildPresences]:[])]});
 const store = new Store(env.DATABASE_PATH || './data/rize.sqlite');
-if (store.get('guild') && store.get('guild') !== env.GUILD_ID) throw Error('قاعدة البيانات تخص سيرفر ثاني. استخدم مسار بيانات جديد.');
+if (store.get('guild') && store.get('guild') !== env.GUILD_ID) throw Error('This database belongs to another server. Use a different database path.');
 store.set('guild',env.GUILD_ID);
 const demo = new DemoRewards(store);
 const logo = fileURLToPath(new URL('./lfg-banner.png',import.meta.url));
@@ -21,7 +21,7 @@ let guild, showcase, match, panelMessage, lastPanel, timer, initialized = false;
 const synced = new Map();
 let queue = Promise.resolve();
 const enqueue = work => { const job=queue.then(work); queue=job.catch(()=>{}); return job; };
-const log = error => console.error('تعذّرت عملية ديسكورد. رمز الخطأ:',error.code ?? error.name ?? 'unknown');
+const log = error => console.error('Discord operation failed. Error code:',error.code ?? error.name ?? 'unknown');
 
 async function syncRequest(r) {
   if (!r.message) return;
@@ -43,7 +43,7 @@ async function refreshPanel() {
   const signature = JSON.stringify(payload);
   if (lastPanel===signature && panelMessage) return;
   try {
-    if (panelMessage) await panelMessage.edit({...payload,...(!panelMessage.attachments.some(a=>a.name==='lfg-banner.png') ? {attachments:[],files:[{attachment:logo,name:'lfg-banner.png'}]} : {})});
+    if (panelMessage) await panelMessage.edit({...payload,...(!lastPanel || !panelMessage.attachments.some(a=>a.name==='lfg-banner.png') ? {attachments:[],files:[{attachment:logo,name:'lfg-banner.png'}]} : {})});
     else {
       panelMessage=await showcase.send({...payload,files:[{attachment:logo,name:'lfg-banner.png'}]});
       store.set('panel',panelMessage.id); store.set('panel_channel',showcase.id);
@@ -65,8 +65,8 @@ async function initialize() {
   match=await guild.channels.fetch(env.MATCH_CHANNEL_ID);
   const me=await guild.members.fetchMe();
   for(const channel of [showcase,match]) {
-    if(channel?.type!==ChannelType.GuildText) throw Error('القنوات لازم تكون قنوات نصية عادية داخل السيرفر.');
-    if(!channel.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.EmbedLinks,PermissionFlagsBits.AttachFiles,PermissionFlagsBits.ReadMessageHistory])) throw Error('صلاحيات البوت ناقصة في إحدى القنوات. راجع دليل التشغيل.');
+    if(channel?.type!==ChannelType.GuildText) throw Error('Both channels must be regular server text channels.');
+    if(!channel.permissionsFor(me)?.has([PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.EmbedLinks,PermissionFlagsBits.AttachFiles,PermissionFlagsBits.ReadMessageHistory])) throw Error('The bot lacks required channel permissions. Check the setup guide.');
   }
   // Reconcile saved registrations for members who left while the bot was offline.
   for(const {user} of store.db.prepare("SELECT user FROM availability UNION SELECT owner AS user FROM requests WHERE status IN ('open','full') UNION SELECT user FROM joins").all()) {
@@ -86,35 +86,35 @@ async function initialize() {
   if(id) {
     try {panelMessage=await showcase.messages.fetch(id);}
     catch(error) {if(error.code!==10008) throw error;}
-    if(panelMessage && panelMessage.author.id!==client.user.id) throw Error('رسالة اللوحة لازم تكون مرسلة من نفس البوت.');
+    if(panelMessage && panelMessage.author.id!==client.user.id) throw Error('The panel message must belong to this bot.');
   }
   if(!panelMessage) {
     const history=await showcase.messages.fetch({limit:100});
-    panelMessage=history.find(m=>m.author.id===client.user.id && m.embeds.some(e=>e.footer?.text===MARKER)) ?? null;
+    panelMessage=history.find(m=>m.author.id===client.user.id && m.embeds.some(e=>[MARKER,'Rize.gg • لقّط تيمك'].includes(e.footer?.text))) ?? null;
     if(panelMessage) {store.set('panel',panelMessage.id);store.set('panel_channel',showcase.id);}
   }
   await tick();
   await ensureDemoPanel(showcase,client,store);
   initialized=true;
   timer=setInterval(()=>enqueue(tick).catch(log),30_000);
-  console.log('Rize.gg جاهز. تم تشغيل اللوحة والأزرار.');
+  console.log('Rize.gg ready. Panels and buttons initialized.');
 }
 client.once(Events.ClientReady,()=>enqueue(initialize).catch(error=>{
-  console.error('تعذّر بدء التشغيل. تأكد من الإعدادات والصلاحيات.');log(error);client.destroy();process.exitCode=1;
+  console.error('Startup failed. Check settings and permissions.');log(error);client.destroy();process.exitCode=1;
 }));
 client.on(Events.InteractionCreate,async i=>{
   if(!i.isButton() && !i.isStringSelectMenu()) return;
   if(i.guildId!==env.GUILD_ID || i.user.bot) return;
   try {
-    if(!initialized) {await i.reply({content:'البوت يجهّز نفسه، جرّب بعد شوي.',flags:MessageFlags.Ephemeral});return;}
+    if(!initialized) {await i.reply({content:'Starting up. Try again in a moment.',flags:MessageFlags.Ephemeral});return;}
     if(i.message.flags.has(MessageFlags.Ephemeral)) await i.deferUpdate();
     else await i.deferReply({flags:MessageFlags.Ephemeral});
     await enqueue(async()=>{
       try {if(i.customId.startsWith('demo:')) await handleDemo(i,demo); else await handle(i,{store,match,syncRequest});}
       catch(error) {
-        const expected=/[\u0600-\u06ff]/.test(error.message) && !error.code;
+        const expected=error.userFacing === true;
         if(!expected) log(error);
-        await i.editReply({content:expected?error.message:'صار خطأ بسيط. جرّب مرة ثانية، وإذا استمر كلّم مشرف السيرفر.',embeds:[],components:[],allowedMentions:{parse:[]}});
+        await i.editReply({content:expected?error.message:'Something went wrong. Try again, or contact a moderator if it continues.',embeds:[],components:[],allowedMentions:{parse:[]}});
       }
     });
   } catch(error) {log(error);}

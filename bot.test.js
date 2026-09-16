@@ -78,9 +78,9 @@ test('database survives restart with registrations and usable request IDs',()=>{
     s=new Store(path);assert.equal(s.active().length,1);assert.equal(s.join(r.id,'u').status,'full');s.db.close();
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
-test('Arabic Discord payloads serialize within component limits and count unique people',t=>{
+test('English Discord payloads serialize within component limits and count unique people',t=>{
   const {store:s}=fixture(t);s.register('u','chess','1',0);s.register('u','rocket','1',0);
-  const p=panel(s);assert.match(p.components[1].toJSON().components[0].label,/١ جاهز/);
+  const p=panel(s);assert.match(p.components[1].toJSON().components[0].label,/1 ready/);
   assert.ok(p.embeds[0].toJSON().description.length<4096);
   for(const game of Object.keys(GAMES)) for(const mode of ['register','find']) {
     assert.ok(ranks(mode,game).toJSON().components[0].options.length<=25);
@@ -97,9 +97,9 @@ test('button workflow registers, publishes with controlled mentions, joins, and 
   await handle(i('u','game:register',['chess']),ctx);assert.equal(output.components.length,2);
   await handle(i('u','rank:register:chess',['1']),ctx);
   assert.equal(s.active('chess').length,1);
-  await handle(i('u','mine'),ctx);assert.match(output.content,/جاهزيتك/);
+  await handle(i('u','mine'),ctx);assert.match(output.content,/Your availability/);
   await handle(i('u','time:chess:1',['0']),ctx);assert.equal(s.active('chess').length,1);
-  await handle(i('host','size:chess:any',['1']),ctx);assert.match(output.content,/راجع طلبك/);
+  await handle(i('host','size:chess:any',['1']),ctx);assert.match(output.content,/Review your request/);
   await handle(i('host','publish:chess:any:1'),ctx);
   assert.deepEqual(sent.allowedMentions,{parse:[],users:['u']});
   const r=s.recent()[0];
@@ -128,7 +128,7 @@ test('demo level milestones award once and bonus XP cannot mint tickets',async t
 test('demo spins persist and repeated confirmations do not spend tickets twice',async t=>{
   const {DemoRewards}=await import('./demo.js');const {store}=fixture(t);
   const d=new DemoRewards(store,()=>99);
-  const first=d.spin('u','a');assert.match(first.label,/معاينة/);
+  const first=d.spin('u','a');assert.match(first.label,/preview/);
   d.spin('u','b');assert.deepEqual(d.spin('u','a'),first);
   assert.equal(d.profile('u').tickets,1);
   const reopened=new DemoRewards(store,()=>0);reopened.spin('u','c');
@@ -136,7 +136,7 @@ test('demo spins persist and repeated confirmations do not spend tickets twice',
 });
 test('demo panel is explicitly labelled and serializes valid components',async()=>{
   const {demoPanel}=await import('./demo.js');const p=demoPanel();
-  assert.match(p.embeds[0].toJSON().description,/ما فيها جوائز نقدية/);
+  assert.match(p.embeds[0].toJSON().description,/no real money/);
   assert.equal(p.components[0].toJSON().components.length,2);
 });
 
@@ -149,7 +149,7 @@ test('direct game buttons register quickly and retain optional ranks',async t=>{
   const {store:s}=fixture(t);let out;
   const i={user:{id:'u'},customId:'ready:rocket',editReply:async p=>{out=p;}};
   await handle(i,{store:s,match:{id:'chat'}});assert.equal(s.active('rocket')[0].rank,'0');
-  assert.match(out.content,/سجّلناك/);
+  assert.match(out.content,/You are ready/);
 });
 
 test('quick search publishes a one-player casual request',async t=>{
@@ -161,6 +161,14 @@ test('quick search publishes a one-player casual request',async t=>{
 test('one-click wheel returns the image matching the stored outcome',async t=>{
  const {DemoRewards,handleDemo}=await import('./demo.js');const {store}=fixture(t);let out;
  await handleDemo({id:'spin-test',user:{id:'u'},customId:'demo:wheel',editReply:async p=>{out=p;}},new DemoRewards(store,()=>99));
- assert.equal(out.files[0].name,'wheel-cash.png');assert.match(out.content,/معاينة/);
+ assert.equal(out.files[0].name,'wheel-cash.gif');assert.match(out.content,/preview/);
  assert.equal(new DemoRewards(store).profile('u').tickets,2);
+});
+
+test('English prize history keeps existing balances and outcomes',async t=>{
+ const {DemoRewards}=await import('./demo.js');const {store}=fixture(t);
+ store.set('demo:u',JSON.stringify({activity:250,bonus:100,tickets:2,milestones:0,wins:[{label:'رتبة',xp:0}],spins:{old:{label:'رتبة',xp:0}}}));
+ const d=new DemoRewards(store);const p=d.profile('u');
+ assert.equal(p.tickets,2);assert.equal(p.activity,250);assert.equal(p.bonus,100);
+ assert.match(p.wins[0].label,/Special role/);assert.equal(d.spin('u','old').key,'role');assert.equal(d.profile('u').tickets,2);
 });

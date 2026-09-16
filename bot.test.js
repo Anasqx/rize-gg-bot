@@ -87,7 +87,7 @@ test('Arabic Discord payloads serialize within component limits and count unique
   }
   assert.equal(gameMenu('register',s).toJSON().components[0].options.length,4);
   const r=s.create('host','chess','any',1);
-  assert.equal(requestView({...r,status:'open'}).components[0].toJSON().components.length,4);
+  assert.equal(requestView({...r,status:'open'}).components[0].toJSON().components.length,2);
 });
 test('button workflow registers, publishes with controlled mentions, joins, and protects closure',async t=>{
   const {store:s}=fixture(t);let sent;let output;
@@ -137,5 +137,30 @@ test('demo spins persist and repeated confirmations do not spend tickets twice',
 test('demo panel is explicitly labelled and serializes valid components',async()=>{
   const {demoPanel}=await import('./demo.js');const p=demoPanel();
   assert.match(p.embeds[0].toJSON().description,/ما فيها جوائز نقدية/);
-  assert.equal(p.components[0].toJSON().components.length,3);
+  assert.equal(p.components[0].toJSON().components.length,2);
+});
+
+
+test('quick LFG accepts unregistered casual joins and keeps ranked checks',async t=>{
+  const {store:s}=fixture(t);const r=s.create('host','chess','any',1);s.publish(r.id,'m');
+  assert.equal(s.join(r.id,'newbie').status,'full');
+});
+test('direct game buttons register quickly and retain optional ranks',async t=>{
+  const {store:s}=fixture(t);let out;
+  const i={user:{id:'u'},customId:'ready:rocket',editReply:async p=>{out=p;}};
+  await handle(i,{store:s,match:{id:'chat'}});assert.equal(s.active('rocket')[0].rank,'0');
+  assert.match(out.content,/سجّلناك/);
+});
+
+test('quick search publishes a one-player casual request',async t=>{
+ const {store}=fixture(t);let posted;
+ const i={user:{id:'u'},guildId:'g',customId:'quickfind:chess',editReply:async()=>{}};
+ await handle(i,{store,match:{id:'chat',send:async p=>{posted=p;return{id:'m',url:'https://discord.com/channels/g/chat/m'};}}});
+ assert.equal(store.recent()[0].rank,'any');assert.equal(store.recent()[0].needed,1);assert.ok(posted.embeds.length);
+});
+test('one-click wheel returns the image matching the stored outcome',async t=>{
+ const {DemoRewards,handleDemo}=await import('./demo.js');const {store}=fixture(t);let out;
+ await handleDemo({id:'spin-test',user:{id:'u'},customId:'demo:wheel',editReply:async p=>{out=p;}},new DemoRewards(store,()=>99));
+ assert.equal(out.files[0].name,'wheel-cash.png');assert.match(out.content,/معاينة/);
+ assert.equal(new DemoRewards(store).profile('u').tickets,2);
 });

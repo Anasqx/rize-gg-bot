@@ -67,8 +67,8 @@ export class Store {
     if (r.players.includes(user)) throw Error('أنت منضم لهالطلب من قبل.');
     if (r.players.length >= r.needed) throw Error('اكتمل الفريق.');
     const a = this.active(r.game).find(a => a.user === user);
-    if (!a) throw Error('سجّل جاهزيتك «الحين» لهاللعبة من اللوحة، وبعدها ارجع انضم.');
-    if (r.rank !== 'any' && a.rank !== r.rank) throw Error('رتبتك المسجّلة ما تطابق رتبة هالطلب.');
+    if (!a && r.rank !== 'any') throw Error('سجّل جاهزيتك «الحين» لهاللعبة من اللوحة، وبعدها ارجع انضم.');
+    if (r.rank !== 'any' && a?.rank !== r.rank) throw Error('رتبتك المسجّلة ما تطابق رتبة هالطلب.');
     this.db.exec('BEGIN IMMEDIATE');
     try {
       this.db.prepare('INSERT INTO joins VALUES(?,?)').run(id,user);

@@ -16,7 +16,7 @@ const store = new Store(env.DATABASE_PATH || './data/rize.sqlite');
 if (store.get('guild') && store.get('guild') !== env.GUILD_ID) throw Error('قاعدة البيانات تخص سيرفر ثاني. استخدم مسار بيانات جديد.');
 store.set('guild',env.GUILD_ID);
 const demo = new DemoRewards(store);
-const logo = fileURLToPath(new URL('./rize-icon.png',import.meta.url));
+const logo = fileURLToPath(new URL('./lfg-banner.png',import.meta.url));
 let guild, showcase, match, panelMessage, lastPanel, timer, initialized = false;
 const synced = new Map();
 let queue = Promise.resolve();
@@ -43,9 +43,9 @@ async function refreshPanel() {
   const signature = JSON.stringify(payload);
   if (lastPanel===signature && panelMessage) return;
   try {
-    if (panelMessage) await panelMessage.edit(payload);
+    if (panelMessage) await panelMessage.edit({...payload,...(!panelMessage.attachments.some(a=>a.name==='lfg-banner.png') ? {attachments:[],files:[{attachment:logo,name:'lfg-banner.png'}]} : {})});
     else {
-      panelMessage=await showcase.send({...payload,files:[{attachment:logo,name:'rize-icon.png'}]});
+      panelMessage=await showcase.send({...payload,files:[{attachment:logo,name:'lfg-banner.png'}]});
       store.set('panel',panelMessage.id); store.set('panel_channel',showcase.id);
     }
     lastPanel=signature;

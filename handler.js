@@ -1,6 +1,6 @@
 import { ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import { GAMES, ar, rankName, validateGameRank } from './games.js';
-import { privateView as view, row, button, home, gameMenu, ranks, timing, size, stamp, requestView } from './ui.js';
+import { privateView as view, row, button, home, gameMenu, ranks, timing, size, stamp, requestView, gameButtons } from './ui.js';
 
 export async function handle(i, ctx) {
   const {store, match, syncRequest} = ctx;
@@ -8,7 +8,26 @@ export async function handle(i, ctx) {
   const user = i.user.id;
   const reply = (text, components = [home()]) => i.editReply(view(text,components));
   const value = i.values?.[0];
-  if (action==='home') return reply('وش ودّك تسوي؟',[row(button('register','🎮 ألعب الحين',ButtonStyle.Success),button('find','🔎 أبي لاعبين',ButtonStyle.Primary),button('mine','👤 حالتي'))]);
+  if (action==='home' || action==='games') return reply('اختر لعبتك 👇',[gameButtons(store),row(button('mine','حالتي'))]);
+  if (['pick','ready','quickfind','options'].includes(action)) {
+    if(!GAMES[a]) throw Error('اختر لعبة من اللوحة.');
+    if(action==='ready') {
+      const rank=store.mine(user).find(r=>r.game===a)?.rank || store.get(`rank:${user}:${a}`) || '0';
+      store.register(user,a,rank,0);
+      return reply(`✅ سجّلناك في ${GAMES[a].name} لساعتين. بنمنشنك في <#${match.id}> إذا أحد احتاجك.`,[row(button(`remove:${a}`,'خلاص، مو جاهز'),button(`options:${a}`,'غيّر الرتبة أو الوقت'))]);
+    }
+    if(action==='quickfind') return handle({...i,customId:`publish:${a}:any:1`,editReply:i.editReply.bind(i)},ctx);
+    if(action==='options') return reply('الرتبة والوقت اختياريين. اختر رتبتك لتعديل التسجيل.',[ranks('register',a),row(button(`gamefind:${a}`,'حدد رتبة وعدد الطلب'),button(`pick:${a}`,'رجوع'))]);
+    const links=store.recent().filter(r=>r.game===a && r.status==='open' && r.expires>store.now()).slice(-3).map(r=>`[انضم لفريق](https://discord.com/channels/${i.guildId}/${match.id}/${r.message})`).join(' · ');
+    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} جاهز\n${links || 'تبي أحد يناديك أو تفتح طلب؟'}\nالتسجيل لساعتين ويشمل منشن. الطلب السريع: لاعب واحد، أي رتبة.`,[row(button(`ready:${a}`,'أنا جاهز',ButtonStyle.Success),button(`quickfind:${a}`,'انشر طلب لاعب',ButtonStyle.Primary)),row(button(`options:${a}`,'خيارات'),button('home','رجوع'))]);
+  }
+  if(action==='gamefind') {if(!GAMES[a]) throw Error('اختيار غير صالح.');return reply('اختر رتبة الطلب.',[ranks('find',a),home()]);}
+  if(action==='cancelReq' || action==='leaveReq') {
+    const r=store.request(a);if(!r) throw Error('الطلب انتهى.');
+    if(action==='cancelReq') {if(r.owner!==user && !i.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) throw Error('هذا الطلب مو لك.');store.close(a);}
+    else store.leave(a,user);
+    await syncRequest(store.request(a));return reply('تم ✅');
+  }
   if (['games','register','find'].includes(action)) {
     const mode = action === 'find' ? 'find' : 'register';
     return reply(action==='games' ? '🎮 هذي الألعاب وعدد الجاهزين الحين. اختر لعبة وسجّل معهم!' : mode==='find' ? '🔎 وش اللعبة اللي ناقصكم فيها لاعبين؟' : '🙋 حيّاك! اختر لعبتك ورتبتك، ونسجّلك جاهز الحين لمدة ساعتين.',[gameMenu(mode,store),home()]);
@@ -21,6 +40,7 @@ export async function handle(i, ctx) {
   if (action==='rank') {
     if (!['register','find'].includes(a) || !validateGameRank(b,value,a==='find')) throw Error('اختيار غير صالح.');
     if (a==='find') return reply('كم لاعب ناقصكم؟ العدد ما يشملك أنت.',[size(b,value),home()]);
+    store.set(`rank:${user}:${b}`,value);
     const {end} = store.register(user,b,value,0);
     return reply(`✅ أنت جاهز في **${GAMES[b].name}** · ${rankName(b,value)}\nتسجيلك ينتهي ${stamp(end)}. بنناديك في <#${match.id}> إذا فيه طلب مناسب.`,[row(button('mine','👤 حالتي'),button(`schedule:${b}:${value}`,'🕒 بلعب بعدين')),home()]);
 
@@ -68,9 +88,14 @@ export async function handle(i, ctx) {
     const requests = store.requestsFor(user);
     return reply(requests.length ? '**طلباتك وفرقك 👥**\n'+requests.slice(0,10).map(r=>`• ${GAMES[r.game].name}: https://discord.com/channels/${i.guildId}/${match.id}/${r.message}`).join('\n') : 'ما عندك طلب أو فريق مفتوح الحين.');
   }
-  if (['join','decline','close','leave'].includes(action)) {
+  if (['join','decline','close','leave','manage'].includes(action)) {
     const r = store.request(a);
     if (!r || i.message.id !== r.message || i.channelId !== match.id) throw Error('هذا الطلب مو متاح.');
+    if(action==='manage') {
+      if(r.owner===user || i.memberPermissions?.has(PermissionFlagsBits.ManageMessages)) return reply('خيارات الطلب',[row(button(`cancelReq:${a}`,'إقفال الطلب',ButtonStyle.Danger))]);
+      if(r.players.includes(user)) return reply('أنت منضم لهالفريق',[row(button(`leaveReq:${a}`,'انسحاب'))]);
+      return reply('تقدر تنضم من زر «انضمام» في الطلب.');
+    }
     if (action==='join') {
       const updated = store.join(a,user);
       await syncRequest(updated);

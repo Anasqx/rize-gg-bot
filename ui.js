@@ -25,27 +25,19 @@ export function size(game, rank) {
   return row(new StringSelectMenuBuilder().setCustomId(`size:${game}:${rank}`).setPlaceholder('كم لاعب ناقصكم؟').addOptions(
     Array.from({length:GAMES[game].max},(_,i) => ({label:`${ar(i+1)} لاعب`,value:String(i+1)}))));
 }
-export function panel(store, onlineCount) {
-  const active = store.active();
-  const total = new Set(active.map(a => a.user)).size;
-  const lines = Object.entries(GAMES).map(([key,g]) => `${g.emoji} **${g.name}** · ${ar(active.filter(a=>a.game===key).length)} جاهز`);
-  const e = embed('🎮 Rize.gg | لقّط تيمك',
-    'ودّك تلعب؟ اختر اللي يناسبك 👇\n\n**ألعب الحين** · سجّل لعبتك ورتبتك ونناديك إذا أحد يحتاجك.\n**أبي لاعبين** · افتح طلب وكمّل فريقك.\n\n'+lines.join('\n')+
-    '\n\n⏱️ التسجيل ساعتين، وتقدر تلغيه من «حالتي».\n🔔 بنمنشنك في شات اللعب للطلبات المناسبة.' +
-    (onlineCount === undefined ? '' : `\n🟢 أونلاين من المسجّلين: ${ar(onlineCount)}`))
-    .setThumbnail('attachment://rize-icon.png');
-  return { embeds:[e], components:[
-    row(button('register','🎮 ألعب الحين',ButtonStyle.Success),button('find','🔎 أبي لاعبين',ButtonStyle.Primary),button('mine','👤 حالتي')),
-    row(button('games',`الألعاب · ${ar(total)} جاهز`))
-  ], allowedMentions:{parse:[]} };
+export const gameButtons = store => row(...Object.entries(GAMES).map(([key,g])=>button(`pick:${key}`,`${g.emoji} ${g.name} · ${ar(store.active(key).length)}`)));
+export function panel(store) {
+  const total = new Set(store.active().map(a=>a.user)).size;
+  return {embeds:[embed('🎮 اختر لعبة وبس','جاهز؟ بنناديك. ناقصك لاعب؟ انشر طلب.').setImage('attachment://lfg-banner.png')],
+    components:[gameButtons(store),row(button('games',`الألعاب · ${ar(total)} جاهز`),button('mine','حالتي'))],allowedMentions:{parse:[]}};
 }
 export function requestView(r) {
   const g = GAMES[r.game];
   const status = {pending:'جاري النشر',open:'ننتظركم',full:'اكتمل الفريق 🎉',closed:'تقفّل الطلب',expired:'انتهى وقت الطلب'}[r.status];
   const e = embed(`${g.emoji} ${g.name} | ${status}`,
-    `صاحب الطلب: <@${r.owner}>\nالرتبة: **${rankName(r.game,r.rank)}**\nناقصه: **${ar(Math.max(0,r.needed-r.players.length))}** لاعب\n`+
-    `المنضمّين: ${r.players.map(u=>`<@${u}>`).join('، ') || 'للحين ما انضم أحد'}\nينتهي ${stamp(r.expires)}\n\nاضغط «انضمام» إذا أنت مسجّل وجاهز الحين. بعدها نسّقوا هنا في الشات.`);
+    `<@${r.owner}> يحتاج **${ar(Math.max(0,r.needed-r.players.length))}** لاعب · ${rankName(r.game,r.rank)}\n`+
+    `المنضمّين: ${r.players.map(u=>`<@${u}>`).join('، ') || 'للحين ما انضم أحد'}\nينتهي ${stamp(r.expires)}\n\nودّك تلعب؟ اضغط «انضمام».`);
   return { content:'', embeds:[e], components:r.status==='open' ? [row(
-    button(`join:${r.id}`,'✅ انضمام',ButtonStyle.Success),button(`decline:${r.id}`,'❌ اعتذار'),button(`leave:${r.id}`,'↩️ انسحاب'),button(`close:${r.id}`,'🔒 إقفال الطلب',ButtonStyle.Danger)
-  )] : r.status==='full' ? [row(button(`leave:${r.id}`,'↩️ انسحاب'),button(`close:${r.id}`,'🔒 إقفال الطلب',ButtonStyle.Danger))] : [], allowedMentions:{parse:[]} };
+    button(`join:${r.id}`,'✅ انضمام',ButtonStyle.Success),button(`manage:${r.id}`,'خيارات')
+  )] : r.status==='full' ? [row(button(`manage:${r.id}`,'خيارات'))] : [], allowedMentions:{parse:[]} };
 }

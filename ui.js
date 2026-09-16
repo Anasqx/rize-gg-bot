@@ -30,13 +30,13 @@ export function panel(store, onlineCount) {
   const total = new Set(active.map(a => a.user)).size;
   const lines = Object.entries(GAMES).map(([key,g]) => `${g.emoji} **${g.name}** · ${ar(active.filter(a=>a.game===key).length)} جاهز`);
   const e = embed('🎮 Rize.gg | لقّط تيمك',
-    'ناقصك لاعب؟ أو ودّك تدخل مع تيم؟ حيّاك!\n\n**١ · سجّل جاهزيتك** واختر لعبتك ورتبتك ووقتك.\n**٢ · ابحث عن لاعبين** وخلّنا ننادي المناسبين لك.\n**٣ · انضم للفريق** من الطلب في شات اللعب.\n\n'+lines.join('\n')+
-    '\n\n⏱️ جاهزيتك ساعتين من وقت البداية، وتقدر تجدّدها.\n🔔 تسجيلك يعني موافقتك على المنشن في شات اللعب.\nالأعداد للي مسجّلين وجاهزين الحين، حتى لو حالتهم مخفية.' +
-    (onlineCount === undefined ? '' : `\n🟢 ظاهرين أونلاين من المسجّلين: ${ar(onlineCount)}`))
+    'ودّك تلعب؟ اختر اللي يناسبك 👇\n\n**ألعب الحين** · سجّل لعبتك ورتبتك ونناديك إذا أحد يحتاجك.\n**أبي لاعبين** · افتح طلب وكمّل فريقك.\n\n'+lines.join('\n')+
+    '\n\n⏱️ التسجيل ساعتين، وتقدر تلغيه من «حالتي».\n🔔 بنمنشنك في شات اللعب للطلبات المناسبة.' +
+    (onlineCount === undefined ? '' : `\n🟢 أونلاين من المسجّلين: ${ar(onlineCount)}`))
     .setThumbnail('attachment://rize-icon.png');
   return { embeds:[e], components:[
-    row(button('games',`🎮 الألعاب · ${ar(total)} جاهز`,ButtonStyle.Primary),button('register','🙋 سجّل جاهزيتك',ButtonStyle.Success),button('find','🔎 ابحث عن لاعبين',ButtonStyle.Primary)),
-    row(button('mine','⚙️ جاهزيتي'),button('requests','👥 طلباتي'),button('help','💡 كيف أبدأ؟'))
+    row(button('register','🎮 ألعب الحين',ButtonStyle.Success),button('find','🔎 أبي لاعبين',ButtonStyle.Primary),button('mine','👤 حالتي')),
+    row(button('games',`الألعاب · ${ar(total)} جاهز`))
   ], allowedMentions:{parse:[]} };
 }
 export function requestView(r) {

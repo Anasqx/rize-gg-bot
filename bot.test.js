@@ -80,7 +80,7 @@ test('database survives restart with registrations and usable request IDs',()=>{
 });
 test('Arabic Discord payloads serialize within component limits and count unique people',t=>{
   const {store:s}=fixture(t);s.register('u','chess','1',0);s.register('u','rocket','1',0);
-  const p=panel(s);assert.match(p.components[0].toJSON().components[0].label,/١ جاهز/);
+  const p=panel(s);assert.match(p.components[1].toJSON().components[0].label,/١ جاهز/);
   assert.ok(p.embeds[0].toJSON().description.length<4096);
   for(const game of Object.keys(GAMES)) for(const mode of ['register','find']) {
     assert.ok(ranks(mode,game).toJSON().components[0].options.length<=25);
@@ -96,6 +96,8 @@ test('button workflow registers, publishes with controlled mentions, joins, and 
   const i=(user,customId,values)=>({user:{id:user},customId,values,guildId:'g',channelId:'chat',message:{id:'message'},memberPermissions:{has:()=>false},editReply:async p=>{output=p;}});
   await handle(i('u','game:register',['chess']),ctx);assert.equal(output.components.length,2);
   await handle(i('u','rank:register:chess',['1']),ctx);
+  assert.equal(s.active('chess').length,1);
+  await handle(i('u','mine'),ctx);assert.match(output.content,/جاهزيتك/);
   await handle(i('u','time:chess:1',['0']),ctx);assert.equal(s.active('chess').length,1);
   await handle(i('host','size:chess:any',['1']),ctx);assert.match(output.content,/راجع طلبك/);
   await handle(i('host','publish:chess:any:1'),ctx);

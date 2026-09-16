@@ -8,22 +8,30 @@ export async function handle(i, ctx) {
   const user = i.user.id;
   const reply = (text, components = [home()]) => i.editReply(view(text,components));
   const value = i.values?.[0];
-  if (['home','games','register','find'].includes(action)) {
+  if (action==='home') return reply('وش ودّك تسوي؟',[row(button('register','🎮 ألعب الحين',ButtonStyle.Success),button('find','🔎 أبي لاعبين',ButtonStyle.Primary),button('mine','👤 حالتي'))]);
+  if (['games','register','find'].includes(action)) {
     const mode = action === 'find' ? 'find' : 'register';
-    return reply(action==='games' ? '🎮 هذي الألعاب وعدد الجاهزين الحين. اختر لعبة وسجّل معهم!' : mode==='find' ? '🔎 وش اللعبة اللي ناقصكم فيها لاعبين؟' : '🙋 حيّاك! اختر لعبتك، وبعدها رتبتك ووقتك.',[gameMenu(mode,store),home()]);
+    return reply(action==='games' ? '🎮 هذي الألعاب وعدد الجاهزين الحين. اختر لعبة وسجّل معهم!' : mode==='find' ? '🔎 وش اللعبة اللي ناقصكم فيها لاعبين؟' : '🙋 حيّاك! اختر لعبتك ورتبتك، ونسجّلك جاهز الحين لمدة ساعتين.',[gameMenu(mode,store),home()]);
   }
-  if (action==='help') return reply('**حيّاك في Rize.gg 👋**\n\n• من «سجّل جاهزيتك» اختر لعبتك ورتبتك ومتى بتلعب. اسمك هو اسمك في ديسكورد.\n• بنمنشنك في شات اللعب إذا أحد طلب لاعب يناسب رتبتك وأنت جاهز.\n• من «ابحث عن لاعبين» اختر اللعبة والرتبة وعدد الناقصين، ثم أكّد النشر.\n• تقدر تنضم للطلبات حتى لو ما جاك منشن، إذا جاهزيتك ورتبتك مناسبة.\n• وقتك ساعتين. من «جاهزيتي» تقدر تجدّد أو تلغي أو تغيّر بياناتك.\n• من «طلباتي» تقدر تقفل طلبك أو تنسحب من فريق.\n• إذا انضمّيت، نشيل جاهزيتك لهاللعبة عشان ما يجيك منشن وأنت مشغول.\n• الاعتذار يخص هالطلب فقط؛ إلغاء الجاهزية يوقف المنشنات الجديدة.\n• الرتب هنا للتنسيق، وما تعني بالضرورة إن اللعبة تسمح لكم تلعبون رانكد سوا.');
+  if (action==='help') return reply('**حيّاك في Rize.gg 👋**\n\n• من «ألعب الحين» اختر لعبتك ورتبتك ومتى بتلعب. اسمك هو اسمك في ديسكورد.\n• بنمنشنك في شات اللعب إذا أحد طلب لاعب يناسب رتبتك وأنت جاهز.\n• من «أبي لاعبين» اختر اللعبة والرتبة وعدد الناقصين، ثم أكّد النشر.\n• تقدر تنضم للطلبات حتى لو ما جاك منشن، إذا جاهزيتك ورتبتك مناسبة.\n• وقتك ساعتين. من «حالتي» تقدر تجدّد أو تلغي أو تغيّر بياناتك.\n• من «حالتي» تقدر تقفل طلبك أو تنسحب من فريق.\n• إذا انضمّيت، نشيل جاهزيتك لهاللعبة عشان ما يجيك منشن وأنت مشغول.\n• الاعتذار يخص هالطلب فقط؛ إلغاء الجاهزية يوقف المنشنات الجديدة.\n• الرتب هنا للتنسيق، وما تعني بالضرورة إن اللعبة تسمح لكم تلعبون رانكد سوا.');
   if (action==='game') {
     if (!GAMES[value] || !['register','find'].includes(a)) throw Error('اختيار غير صالح.');
     return reply(`${GAMES[value].emoji} **${GAMES[value].name}**\n${a==='find'?'اختر رتبة اللاعبين اللي تبيهم.':'اختر رتبتك. تقدر تعدّلها بأي وقت.'}`,[ranks(a,value),home()]);
   }
   if (action==='rank') {
     if (!['register','find'].includes(a) || !validateGameRank(b,value,a==='find')) throw Error('اختيار غير صالح.');
-    return reply(a==='find'?'كم لاعب ناقصكم؟ العدد ما يشملك أنت.':'متى بتكون جاهز؟ تسجيلك يستمر ساعتين من الوقت اللي تختاره.',[a==='find'?size(b,value):timing(b,value),home()]);
+    if (a==='find') return reply('كم لاعب ناقصكم؟ العدد ما يشملك أنت.',[size(b,value),home()]);
+    const {end} = store.register(user,b,value,0);
+    return reply(`✅ أنت جاهز في **${GAMES[b].name}** · ${rankName(b,value)}\nتسجيلك ينتهي ${stamp(end)}. بنناديك في <#${match.id}> إذا فيه طلب مناسب.`,[row(button('mine','👤 حالتي'),button(`schedule:${b}:${value}`,'🕒 بلعب بعدين')),home()]);
+
+  }
+  if (action==='schedule') {
+    if (!validateGameRank(a,b)) throw Error('اختيار غير صالح.');
+    return reply('متى بتلعب؟ جاهزيتك الحالية تبقى لين تختار الوقت الجديد.',[timing(a,b),home()]);
   }
   if (action==='time') {
     const {start,end} = store.register(user,a,b,Number(value));
-    return reply(`✅ تم! سجّلناك في **${GAMES[a].name}** · **${rankName(a,b)}**\nتبدأ ${stamp(start)} وتنتهي ${stamp(end)}.\nبنناديك في <#${match.id}> إذا فيه طلب مناسب.`,[row(button('mine','⚙️ جاهزيتي'),button('find','🔎 ابحث عن لاعبين'))]);
+    return reply(`✅ تم! سجّلناك في **${GAMES[a].name}** · **${rankName(a,b)}**\nتبدأ ${stamp(start)} وتنتهي ${stamp(end)}.\nبنناديك في <#${match.id}> إذا فيه طلب مناسب.`,[row(button('mine','👤 حالتي'),button('find','🔎 أبي لاعبين'))]);
   }
   if (action==='size') {
     const n = Number(value);
@@ -41,19 +49,21 @@ export async function handle(i, ctx) {
       store.publish(r.id,message.id);
       store.pinged(a,candidates.map(a=>a.user));
       store.remove(user,a);
-      return reply(`✅ نُشر طلبك! [افتح الطلب](${message.url})\nتقدر تقفله من «طلباتي». شلنا جاهزيتك لهاللعبة لأنك الحين تجمع فريق.`);
+      return reply(`✅ نُشر طلبك! [افتح الطلب](${message.url})\nتقدر تقفله من «حالتي». شلنا جاهزيتك لهاللعبة لأنك الحين تجمع فريق.`);
     } catch(error) { store.close(r.id); throw error; }
   }
   if (action==='mine') {
     const items = store.mine(user);
-    if (!items.length) return reply('ما عندك جاهزية مسجّلة. سجّل من هنا 👇',[gameMenu('register',store),home()]);
-    return reply('**جاهزيتك 🎮**\n'+items.map(a=>`${GAMES[a.game].emoji} **${GAMES[a.game].name}** · ${rankName(a.game,a.rank)}\nتبدأ ${stamp(a.start)} وتنتهي ${stamp(a.end)}`).join('\n\n'),[
+    const teams = store.requestsFor(user);
+    const links = teams.length ? '\n\n**فرقك وطلباتك**\n'+teams.slice(0,10).map(r=>`• [${GAMES[r.game].name}](https://discord.com/channels/${i.guildId}/${match.id}/${r.message})`).join('\n') : '';
+    if (!items.length) return reply('أنت مو مسجّل كجاهز الحين.'+links,[row(button('register','🎮 ألعب الحين'),button('find','🔎 أبي لاعبين')),home()]);
+    return reply('**جاهزيتك 🎮**\n'+items.map(a=>`${GAMES[a.game].emoji} **${GAMES[a.game].name}** · ${rankName(a.game,a.rank)}\nتبدأ ${stamp(a.start)} وتنتهي ${stamp(a.end)}`).join('\n\n')+links,[
       ...items.map(a=>row(button(`extend:${a.game}`,`جدّد ${GAMES[a.game].name}`),button(`remove:${a.game}`,'إلغاء',ButtonStyle.Danger))),
       row(button('register','✏️ سجّل أو عدّل'),button('home','↩️ رجوع'))
     ]);
   }
-  if (action==='extend') return reply(`✅ تجدّدت جاهزيتك إلى ${stamp(store.extend(user,a))}.`,[row(button('mine','⚙️ جاهزيتي'))]);
-  if (action==='remove') { store.remove(user,a); return reply('تم إلغاء جاهزيتك لهاللعبة. ما راح نمنشنك لطلبات جديدة إلا إذا سجّلت مرة ثانية.',[row(button('mine','⚙️ جاهزيتي'))]); }
+  if (action==='extend') return reply(`✅ تجدّدت جاهزيتك إلى ${stamp(store.extend(user,a))}.`,[row(button('mine','👤 حالتي'))]);
+  if (action==='remove') { store.remove(user,a); return reply('تم إلغاء جاهزيتك لهاللعبة. ما راح نمنشنك لطلبات جديدة إلا إذا سجّلت مرة ثانية.',[row(button('mine','👤 حالتي'))]); }
   if (action==='requests') {
     const requests = store.requestsFor(user);
     return reply(requests.length ? '**طلباتك وفرقك 👥**\n'+requests.slice(0,10).map(r=>`• ${GAMES[r.game].name}: https://discord.com/channels/${i.guildId}/${match.id}/${r.message}`).join('\n') : 'ما عندك طلب أو فريق مفتوح الحين.');

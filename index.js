@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { Store } from './store.js';
 import { panel, MARKER, requestView } from './ui.js';
 import { handle } from './handler.js';
+import { DemoRewards, ensureDemoPanel, handleDemo } from './demo.js';
 
 const env = process.env;
 for (const key of ['DISCORD_TOKEN','GUILD_ID','PANEL_CHANNEL_ID','MATCH_CHANNEL_ID']) {
@@ -14,6 +15,7 @@ const client = new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.G
 const store = new Store(env.DATABASE_PATH || './data/rize.sqlite');
 if (store.get('guild') && store.get('guild') !== env.GUILD_ID) throw Error('قاعدة البيانات تخص سيرفر ثاني. استخدم مسار بيانات جديد.');
 store.set('guild',env.GUILD_ID);
+const demo = new DemoRewards(store);
 const logo = fileURLToPath(new URL('./rize-icon.png',import.meta.url));
 let guild, showcase, match, panelMessage, lastPanel, timer, initialized = false;
 const synced = new Map();
@@ -92,6 +94,7 @@ async function initialize() {
     if(panelMessage) {store.set('panel',panelMessage.id);store.set('panel_channel',showcase.id);}
   }
   await tick();
+  await ensureDemoPanel(showcase,client,store);
   initialized=true;
   timer=setInterval(()=>enqueue(tick).catch(log),30_000);
   console.log('Rize.gg جاهز. تم تشغيل اللوحة والأزرار.');
@@ -107,7 +110,7 @@ client.on(Events.InteractionCreate,async i=>{
     if(i.message.flags.has(MessageFlags.Ephemeral)) await i.deferUpdate();
     else await i.deferReply({flags:MessageFlags.Ephemeral});
     await enqueue(async()=>{
-      try {await handle(i,{store,match,syncRequest});}
+      try {if(i.customId.startsWith('demo:')) await handleDemo(i,demo); else await handle(i,{store,match,syncRequest});}
       catch(error) {
         const expected=/[\u0600-\u06ff]/.test(error.message) && !error.code;
         if(!expected) log(error);

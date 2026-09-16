@@ -113,3 +113,29 @@ test('failed Discord publish leaves no open request or consumed availability',as
   await assert.rejects(()=>handle({user:{id:'host'},customId:'publish:chess:any:1',editReply:async()=>{}},{store:s,match:{send:async()=>{throw Error('network');}}}));
   assert.equal(s.openFor('host'),undefined);assert.equal(s.active().length,1);
 });
+
+
+test('demo level milestones award once and bonus XP cannot mint tickets',async t=>{
+  const {DemoRewards,progress}=await import('./demo.js');
+  const {store}=fixture(t);const d=new DemoRewards(store,()=>0);
+  assert.equal(progress(1000).level,5);
+  for(let k=0;k<4;k++) d.add('u');
+  assert.equal(d.profile('u').tickets,4);
+  d.add('u');assert.equal(d.profile('u').tickets,4);
+  d.spin('u','a');assert.equal(d.profile('u').tickets,3);
+  assert.equal(d.profile('u').activity,1250);
+});
+test('demo spins persist and repeated confirmations do not spend tickets twice',async t=>{
+  const {DemoRewards}=await import('./demo.js');const {store}=fixture(t);
+  const d=new DemoRewards(store,()=>99);
+  const first=d.spin('u','a');assert.match(first.label,/معاينة/);
+  d.spin('u','b');assert.deepEqual(d.spin('u','a'),first);
+  assert.equal(d.profile('u').tickets,1);
+  const reopened=new DemoRewards(store,()=>0);reopened.spin('u','c');
+  assert.equal(reopened.profile('u').tickets,0);assert.throws(()=>reopened.spin('u','d'));
+});
+test('demo panel is explicitly labelled and serializes valid components',async()=>{
+  const {demoPanel}=await import('./demo.js');const p=demoPanel();
+  assert.match(p.embeds[0].toJSON().description,/ما فيها جوائز نقدية/);
+  assert.equal(p.components[0].toJSON().components.length,3);
+});

@@ -186,3 +186,13 @@ test('live count image changes on registration and returns after removal',async 
  const ready=await liveImage(store,GAMES);assert.notDeepEqual(ready,empty);
  store.remove('u','rocket');assert.deepEqual(await liveImage(store,GAMES),empty);
 });
+
+test('balanced replies use images only for navigation and preserve mention text',async()=>{
+ const {replyPayload}=await import('./visual.js');
+ for(const action of ['ready:rocket','quickfind:chess','mine','join:1','demo:profile']) {
+ const p=await replyPayload(action,{content:'Ready <@123> — talk in <#456>',components:[]});
+ assert.equal(p.files.length,0);assert.match(p.embeds[0].toJSON().description,/<@123>.*<#456>/);
+ assert.deepEqual(p.allowedMentions,{parse:[]});
+ }
+ const menu=await replyPayload('pick:rocket',{content:'Choose an action',components:[]});assert.equal(menu.files.length,1);
+});

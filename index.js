@@ -1,5 +1,5 @@
 import { Client, Events, GatewayIntentBits, MessageFlags, PermissionFlagsBits, ChannelType } from 'discord.js';
-import { visualPayload, liveImage } from './visual.js';
+import { visualPayload, liveImage, textPayload, replyPayload } from './visual.js';
 import { GAMES } from './games.js';
 import { Store } from './store.js';
 import { panel, MARKER, requestView } from './ui.js';
@@ -28,7 +28,7 @@ async function syncRequest(r) {
   const payload = requestView(r);
   const signature = JSON.stringify(payload);
   if (synced.get(r.id) === signature) return;
-  try { await match.messages.edit(r.message,await visualPayload(payload,guild)); synced.set(r.id,signature); }
+  try { await match.messages.edit(r.message,{...payload,attachments:[]}); synced.set(r.id,signature); }
   catch(error) {
     if (error.code===10008) {
       store.close(r.id);
@@ -107,20 +107,20 @@ client.on(Events.InteractionCreate,async i=>{
   if(!i.isButton() && !i.isStringSelectMenu()) return;
   if(i.guildId!==env.GUILD_ID || i.user.bot) return;
   try {
-    if(!initialized) {await i.reply({...await visualPayload({content:'Starting up. Try again in a moment.'},guild),flags:MessageFlags.Ephemeral});return;}
+    if(!initialized) {await i.reply({...textPayload({content:'Starting up. Try again in a moment.'}),flags:MessageFlags.Ephemeral});return;}
     if(i.message.flags.has(MessageFlags.Ephemeral)) await i.deferUpdate();
     else await i.deferReply({flags:MessageFlags.Ephemeral});
     await enqueue(async()=>{
       try {
-        const screen=new Proxy(i,{get(target,key){if(key==='editReply')return async payload=>target.editReply(await visualPayload(payload,guild));return Reflect.get(target,key,target);}});
-        const chat={id:match.id,send:async payload=>match.send(await visualPayload(payload,guild))};
+        const screen=new Proxy(i,{get(target,key){if(key==='editReply')return async payload=>target.editReply(await replyPayload(i.customId,payload,guild));return Reflect.get(target,key,target);}});
+        const chat={id:match.id,send:async payload=>match.send(payload)};
         if(i.customId.startsWith('demo:')) await handleDemo(screen,demo); else await handle(screen,{store,match:chat,syncRequest});
         await refreshPanel();
       }
       catch(error) {
         const expected=error.userFacing === true;
         if(!expected) log(error);
-        await i.editReply(await visualPayload({content:expected?error.message:'Something went wrong. Try again, or contact a moderator if it continues.',embeds:[],components:[],allowedMentions:{parse:[]}},guild));
+        await i.editReply(textPayload({content:expected?error.message:'Something went wrong. Try again, or contact a moderator if it continues.',embeds:[],components:[],allowedMentions:{parse:[]}}));
       }
     });
   } catch(error) {log(error);}

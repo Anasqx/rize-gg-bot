@@ -41,3 +41,13 @@ export async function liveImage(store,games) {
  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="960" height="170"><rect width="960" height="170" fill="#080f18"/>${counts.map((g,i)=>`<rect x="${20+i*235}" y="12" width="220" height="112" rx="8" fill="#14242d" stroke="#42666c"/><text x="${130+i*235}" y="45" text-anchor="middle" fill="#cde8e8" font-family="Arial" font-size="20">${escape(g.name)}</text><text x="${130+i*235}" y="85" text-anchor="middle" fill="#99f9ea" font-family="Arial" font-size="32" font-weight="bold">${g.count}</text><text x="${130+i*235}" y="111" text-anchor="middle" fill="#a6bdc7" font-family="Arial" font-size="15">READY NOW</text>`).join('')}<text x="480" y="153" text-anchor="middle" fill="#a6bdc7" font-family="Arial" font-size="17">${new Set(store.active().map(a=>a.user)).size} players ready across all games</text></svg>`;
  return sharp({create:{width:960,height:450,channels:4,background:'#080f18'}}).composite([{input:banner,top:0,left:0},{input:Buffer.from(svg),top:280,left:0}]).png().toBuffer();
 }
+
+export function textPayload(payload) {
+ const embeds=(payload.embeds||[]).map(e=>EmbedBuilder.from(e));
+ if(payload.content) embeds.unshift(new EmbedBuilder().setColor(0x99f9ea).setDescription(payload.content));
+ return {...payload,content:'',embeds,attachments:[],files:payload.files||[],allowedMentions:payload.allowedMentions||{parse:[]}};
+}
+export async function replyPayload(action,payload,guild) {
+ if(['home','games','pick','game','register','find'].includes(action.split(':')[0])) return visualPayload(payload,guild);
+ return textPayload(payload);
+}

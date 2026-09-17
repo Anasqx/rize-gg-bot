@@ -34,10 +34,18 @@ export function panel(store) {
 export function requestView(r) {
   const g = GAMES[r.game];
   const status = {pending:'Posting',open:'Looking for players',full:'Team full 🎉',closed:'Request closed',expired:'Request expired'}[r.status];
-  const e = embed(`${g.emoji} ${g.name} | ${status}`,
-    `<@${r.owner}> needs **${ar(Math.max(0,r.needed-r.players.length))}** player(s) · ${rankName(r.game,r.rank)}\n`+
-    `Joined: ${r.players.map(u=>`<@${u}>`).join(', ') || 'Nobody yet'}\nExpires ${stamp(r.expires)}\n\nWant to play? Tap Join.`);
-  return { content:'', embeds:[e], components:r.status==='open' ? [row(
-    button(`join:${r.id}`,'✅ Join',ButtonStyle.Success),button(`manage:${r.id}`,'Options')
-  )] : r.status==='full' ? [row(button(`manage:${r.id}`,'Options'))] : [], allowedMentions:{parse:[]} };
+  const remaining=Math.max(0,r.needed-r.players.length);
+  const open=r.status==='open';
+  const e=embed(`${g.emoji} ${g.name} • ${status}`,
+    open ? `<@${r.owner}> is looking for a teammate.\n**Want in? Tap Join team below.**` : r.status==='full' ? `Team complete! <@${r.owner}>, you’re ready to play.` : `<@${r.owner}>’s invite has ended.`)
+    .setColor(open?0x99F9EA:r.status==='full'?0xA697EB:0x73818C)
+    .addFields(
+      {name:'🎮 Mode',value:r.rank==='any'?'Casual · any rank':rankName(r.game,r.rank),inline:true},
+      {name:'👥 Team',value:`${r.players.length+1} / ${r.needed+1} players`,inline:true}
+    ).setFooter({text:'Rize.gg • Play together. Rise together.'});
+  if(open)e.addFields({name:'⏳ Invite closes',value:stamp(r.expires),inline:true});
+  if(r.players.length)e.addFields({name:'Your team',value:[r.owner,...r.players].map(u=>`<@${u}>`).join(' · ')});
+  return {content:open?`<@${r.owner}> is looking for ${remaining===1?'a teammate':`${remaining} players`}!`:'',embeds:[e],components:open?[row(
+    button(`join:${r.id}`,'Join team',ButtonStyle.Success),button(`manage:${r.id}`,'Manage team')
+  )]:r.status==='full'?[row(button(`manage:${r.id}`,'Manage team'))]:[],allowedMentions:{parse:[]}};
 }

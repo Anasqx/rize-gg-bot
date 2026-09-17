@@ -9,18 +9,17 @@ export async function handle(i, ctx) {
   const user = i.user.id;
   const reply = (text, components = [home()]) => i.editReply(view(text,components));
   const value = i.values?.[0];
-  if (action==='home' || action==='games') return reply('Pick your game 👇',[gameButtons(store),row(button('mine','My status'))]);
+  if (['home','games','register','find'].includes(action)) return reply('Pick your game 👇',[gameButtons(store),row(button('mine','My status'))]);
   if (['pick','ready','quickfind','options'].includes(action)) {
     if(!GAMES[a]) throw userError('Choose a game from the panel.');
     if(action==='ready') {
       const rank=store.mine(user).find(r=>r.game===a)?.rank || store.get(`rank:${user}:${a}`) || '0';
       store.register(user,a,rank,0);
-      return reply(`✅ You are ready for ${GAMES[a].name} for 2 hours. We will mention you in <#${match.id}> when someone needs a player.`,[row(button(`remove:${a}`,'Stop looking'),button(`options:${a}`,'Change rank or time'))]);
+      return reply(`✅ You are ready for ${GAMES[a].name} for 2 hours. We will mention you in <#${match.id}> when someone needs a player.`,[row(button(`remove:${a}`,'Stop looking'),button('home','Back to games'))]);
     }
     if(action==='quickfind') return handle({...i,customId:`publish:${a}:any:1`,editReply:i.editReply.bind(i)},ctx);
     if(action==='options') return reply('Rank and time are optional. Choose your rank to update your availability.',[ranks('register',a),row(button(`gamefind:${a}`,'Choose rank and team size'),button(`pick:${a}`,'Back'))]);
-    const links=store.recent().filter(r=>r.game===a && r.status==='open' && r.expires>store.now()).slice(-3).map(r=>`[Join a team](https://discord.com/channels/${i.guildId}/${match.id}/${r.message})`).join(' · ');
-    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\nReady to play: get mentioned when a team needs you, for 2 hours.\nFind 1 player: post a request for any rank.\nOptions: change your rank or availability.\n${links}`,[row(button(`ready:${a}`,'Ready to play',ButtonStyle.Success),button(`quickfind:${a}`,'Find 1 player',ButtonStyle.Primary)),row(button(`options:${a}`,'Options'),button('home','Back'))]);
+    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\nReady to play — we’ll notify you for the next 2 hours.\nFind a teammate — post an invite for 1 player, any rank.`,[row(button(`ready:${a}`,'Ready to play',ButtonStyle.Success),button(`quickfind:${a}`,'Find a teammate',ButtonStyle.Primary)),row(button('home','Back to games'))]);
   }
   if(action==='gamefind') {if(!GAMES[a]) throw userError('Invalid selection.');return reply('Choose a rank for your request.',[ranks('find',a),home()]);}
   if(action==='cancelReq' || action==='leaveReq') {
@@ -33,7 +32,7 @@ export async function handle(i, ctx) {
     const mode = action === 'find' ? 'find' : 'register';
     return reply(action==='games' ? '🎮 Pick a game to join the available players!' : mode==='find' ? '🔎 Which game do you need players for?' : '🙋 Choose a game and rank to be available for 2 hours.',[gameMenu(mode,store),home()]);
   }
-  if (action==='help') return reply('Pick a game, then choose Ready to play or Find 1 player. My status lets you manage availability and teams. Rank and time settings are optional.');
+  if (action==='help') return reply('Pick a game, then tap Ready to play or Find a teammate. That’s it!');
   if (action==='game') {
     if (!GAMES[value] || !['register','find'].includes(a)) throw userError('Invalid selection.');
     return reply(`${GAMES[value].emoji} **${GAMES[value].name}**\n${a==='find'?'Choose the rank you want to play with.':'Choose your rank. You can change it later.'}`,[ranks(a,value),home()]);
@@ -64,23 +63,23 @@ export async function handle(i, ctx) {
     const candidates = store.candidates(r);
     try {
       const payload = requestView({...r,status:'open'});
-      payload.content = candidates.length ? `${candidates.map(a=>`<@${a.user}>`).join(' ')}\nA team is looking for you 👋` : '🎮 New request — who is ready?';
+      payload.content += candidates.length ? `\nReady to join? ${candidates.map(a=>`<@${a.user}>`).join(' ')}` : '';
       payload.allowedMentions = {parse:[],users:candidates.map(a=>a.user)};
       const message = await match.send(payload);
       store.publish(r.id,message.id);
       store.pinged(a,candidates.map(a=>a.user));
       store.remove(user,a);
-      return reply(`✅ Request posted! [Open request](${message.url})\nManage it from My status. You are no longer listed as available for this game while you gather your team.`);
+      return reply(`✅ <@${user}>, your **${GAMES[a].name}** invite is live in <#${match.id}>.\n[View your invite](${message.url})` );
     } catch(error) { store.close(r.id); throw error; }
   }
   if (action==='mine') {
     const items = store.mine(user);
     const teams = store.requestsFor(user);
     const links = teams.length ? '\n\n**Your teams and requests**\n'+teams.slice(0,10).map(r=>`• [${GAMES[r.game].name}](https://discord.com/channels/${i.guildId}/${match.id}/${r.message})`).join('\n') : '';
-    if (!items.length) return reply('You are not listed as available.'+links,[row(button('register','🎮 Play now'),button('find','🔎 Find players')),home()]);
+    if (!items.length) return reply('You are not listed as available.'+links,[row(button('home','Choose a game'))]);
     return reply('**Your availability 🎮**\n'+items.map(a=>`${GAMES[a.game].emoji} **${GAMES[a.game].name}** · ${rankName(a.game,a.rank)}\nStarts ${stamp(a.start)} and ends ${stamp(a.end)}`).join('\n\n')+links,[
       ...items.map(a=>row(button(`extend:${a.game}`,`Extend ${GAMES[a.game].name}`),button(`remove:${a.game}`,'Cancel',ButtonStyle.Danger))),
-      row(button('register','✏️ Add or edit'),button('home','↩️ Back'))
+      row(button('home','Back to games'))
     ]);
   }
   if (action==='extend') return reply(`✅ Availability extended until ${stamp(store.extend(user,a))}.`,[row(button('mine','👤 My status'))]);

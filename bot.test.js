@@ -196,3 +196,17 @@ test('balanced replies use images only for navigation and preserve mention text'
  }
  const menu=await replyPayload('pick:rocket',{content:'Choose an action',components:[]});assert.equal(menu.files.length,1);
 });
+
+test('find recommends existing casual team and joins without a duplicate invite',async t=>{
+ const {store}=fixture(t);const r=store.create('host','chess','any',1);store.publish(r.id,'message');let out,synced;
+ const ctx={store,match:{id:'chat',send:async()=>{throw Error('Must not publish');}},syncRequest:async r=>{synced=r;}};
+ const i={user:{id:'guest'},guildId:'guild',customId:'quickfind:chess',editReply:async p=>{out=p;}};
+ await handle(i,ctx);assert.equal(out.components[0].toJSON().components[0].custom_id,`quickjoin:${r.id}`);
+ await handle({...i,customId:`quickjoin:${r.id}`},ctx);assert.equal(synced.status,'full');assert.equal(store.recent().length,1);
+ await assert.rejects(()=>handle({...i,user:{id:'late'},customId:`quickjoin:${r.id}`},ctx));
+});
+test('find returns owner to existing invite',async t=>{
+ const {store}=fixture(t);const r=store.create('host','chess','any',1);store.publish(r.id,'message');let out;
+ await handle({user:{id:'host'},guildId:'guild',customId:'quickfind:chess',editReply:async p=>{out=p;}},{store,match:{id:'chat'}});
+ assert.match(out.content,/guild\/chat\/message/);assert.equal(store.recent().length,1);
+});

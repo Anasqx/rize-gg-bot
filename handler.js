@@ -17,9 +17,24 @@ export async function handle(i, ctx) {
       store.register(user,a,rank,0);
       return reply(`✅ You are ready for ${GAMES[a].name} for 2 hours. We will mention you in <#${match.id}> when someone needs a player.`,[row(button(`remove:${a}`,'Stop looking'),button('home','Back to games'))]);
     }
-    if(action==='quickfind') return handle({...i,customId:`publish:${a}:any:1`,editReply:i.editReply.bind(i)},ctx);
+    if(action==='quickfind') {
+      const existing=store.openFor(user);
+      const current=existing && store.request(existing.id);
+      if(current) return reply(`You already have an invite open.\n[View your invite](https://discord.com/channels/${i.guildId}/${match.id}/${current.message})`,[row(button(`cancelReq:${current.id}`,'Close my invite'),button('home','Back to games'))]);
+      const availability=store.active(a).find(x=>x.user===user);
+      const team=store.recent().filter(r=>r.game===a && r.status==='open' && r.expires>store.now() && r.owner!==user && !r.players.includes(user) && (r.rank==='any'||r.rank===availability?.rank))
+        .sort((x,y)=>(x.needed-x.players.length)-(y.needed-y.players.length)||x.created-y.created)[0];
+      if(team) return i.editReply(view('A team is already looking. Join them or post your own invite.',[row(button(`quickjoin:${team.id}`,'Join team',ButtonStyle.Success),button(`publish:${a}:any:1`,'Post my own')),row(button(`pick:${a}`,'Back'))],requestView(team).embeds));
+      return handle({...i,customId:`publish:${a}:any:1`,editReply:i.editReply.bind(i)},ctx);
+    }
     if(action==='options') return reply('Rank and time are optional. Choose your rank to update your availability.',[ranks('register',a),row(button(`gamefind:${a}`,'Choose rank and team size'),button(`pick:${a}`,'Back'))]);
-    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\nReady to play — we’ll notify you for the next 2 hours.\nFind a teammate — post an invite for 1 player, any rank.`,[row(button(`ready:${a}`,'Ready to play',ButtonStyle.Success),button(`quickfind:${a}`,'Find a teammate',ButtonStyle.Primary)),row(button('home','Back to games'))]);
+    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\nReady to play — we’ll notify you for the next 2 hours.\nFind a teammate — join an open team or post your invite.`,[row(button(`ready:${a}`,'Ready to play',ButtonStyle.Success),button(`quickfind:${a}`,'Find a teammate',ButtonStyle.Primary)),row(button('home','Back to games'))]);
+  }
+  if(action==='quickjoin') {
+    const r=store.request(a);
+    if(!r?.message) throw userError('This invite is no longer available. Choose your game again.');
+    const updated=store.join(a,user);await syncRequest(updated);
+    return reply(`✅ You joined <@${r.owner}> for **${GAMES[r.game].name}**.\n[Open team chat](https://discord.com/channels/${i.guildId}/${match.id}/${r.message})`,[row(button(`leaveReq:${a}`,'Leave team'),button('home','Back to games'))]);
   }
   if(action==='gamefind') {if(!GAMES[a]) throw userError('Invalid selection.');return reply('Choose a rank for your request.',[ranks('find',a),home()]);}
   if(action==='cancelReq' || action==='leaveReq') {

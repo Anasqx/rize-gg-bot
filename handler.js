@@ -1,7 +1,7 @@
 import { userError } from './errors.js';
 import { ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import { GAMES, ar, rankName, validateGameRank } from './games.js';
-import { privateView as view, row, button, home, gameMenu, ranks, timing, size, stamp, requestView, gameButtons, linkButton } from './ui.js';
+import { privateView as view, row, button, home, gameMenu, ranks, timing, size, stamp, requestView, gameButtons, linkButton, embed } from './ui.js';
 
 export async function handle(i, ctx) {
   const {store, match, syncRequest} = ctx;
@@ -10,7 +10,12 @@ export async function handle(i, ctx) {
   const reply = (text, components = [home()]) => i.editReply(view(text,components));
   const teamUrl = r => `https://discord.com/channels/${i.guildId}/${match.id}/${r.message}`;
   const value = i.values?.[0];
-  if (['home','games','register','find'].includes(action)) return reply('Pick your game 👇',[gameButtons(store),row(button('mine','My status'))]);
+  if (['home','games','register','find'].includes(action)) return reply('Pick your game 👇',[gameButtons(store),row(button('myteams','My team'))]);
+  if(action==='myteams') {
+    const teams=store.requestsFor(user);
+    if(!teams.length)return reply('**Your next team is one click away.**\nPick a game to browse open teams.',[row(button('home','Browse games'))]);
+    return i.editReply(view('',[...teams.slice(0,4).map(r=>row(linkButton(`Open ${GAMES[r.game].name}`,teamUrl(r)),button(`${r.owner===user?'cancelReq':'leaveReq'}:${r.id}`,r.owner===user?'Close team':'Leave team'))),home()],teams.slice(0,4).flatMap(r=>requestView(r).embeds)));
+  }
   if (['pick','ready','quickfind','options'].includes(action)) {
     if(!GAMES[a]) throw userError('Choose a game from the panel.');
     if(action==='ready') {
@@ -29,10 +34,17 @@ export async function handle(i, ctx) {
       return handle({...i,customId:`publish:${a}:any:1`,editReply:i.editReply.bind(i)},ctx);
     }
     if(action==='options') return reply('Rank and time are optional. Choose your rank to update your availability.',[ranks('register',a),row(button(`gamefind:${a}`,'Choose rank and team size'),button(`pick:${a}`,'Back'))]);
-    const ready=store.active(a).some(x=>x.user===user);
-    const own=store.requestsFor(user).find(r=>r.game===a && r.owner===user);
-    const choices=[ready?button(`remove:${a}`,'Stop looking'):button(`ready:${a}`,'Notify me',ButtonStyle.Success),own?linkButton('View my invite',teamUrl(own)):button(`quickfind:${a}`,'Find a teammate',ButtonStyle.Primary)];
-    return reply(`**${GAMES[a].name}** · ${ar(store.active(a).length)} ready\n${ready?'You’re on the list. We’ll mention you when a team needs you.':'Notify me — be available for invites for 2 hours.'}\n${own?'Your invite is live. Open it to see your team.':'Find a teammate — join a team or start your own.'}`,[row(...choices),row(button('home','Change game'))]);
+    const page=Math.max(0,Number(b)||0);
+    const teams=store.openTeams(a).sort((x,y)=>y.created-x.created);
+    const offset=Math.min(page*3,Math.max(0,Math.floor((teams.length-1)/3)*3));
+    const shown=teams.slice(offset,offset+3);
+    const joined=store.requestsFor(user).find(r=>r.game===a);
+    const cards=shown.map((r,n)=>embed(`${GAMES[a].name} · Team ${offset+n+1}`,`**Host:** <@${r.owner}>\n**Open spots:** ${r.needed-r.players.length} · ${r.rank==='any'?'Any rank':rankName(a,r.rank)}\nCloses ${stamp(r.expires)}`));
+    const actions=shown.map((r,n)=>r.owner===user||r.players.includes(user)?linkButton(`Open team ${offset+n+1}`,teamUrl(r)):button(`quickjoin:${r.id}`,`Join team ${offset+n+1}`,ButtonStyle.Success));
+    const controls=[];if(actions.length)controls.push(row(...actions));
+    controls.push(row(joined?linkButton('Open my team',teamUrl(joined)):button(`publish:${a}:any:1`,'Start a team',shown.length?ButtonStyle.Secondary:ButtonStyle.Success),button(`pick:${a}:${offset/3}`,'Refresh'),button('home','Change game')));
+    if(teams.length>3)controls.push(row(...(offset>0?[button(`pick:${a}:${offset/3-1}`,'Previous')]:[]),...(offset+3<teams.length?[button(`pick:${a}:${offset/3+1}`,'Next')]:[])));
+    return i.editReply(view(shown.length?'':`**No open ${GAMES[a].name} teams yet.**\nStart a team and invite one player to join you. Any rank welcome.`,controls,cards));
   }
   if(action==='quickjoin') {
     const r=store.request(a);
@@ -51,7 +63,7 @@ export async function handle(i, ctx) {
     const mode = action === 'find' ? 'find' : 'register';
     return reply(action==='games' ? '🎮 Pick a game to join the available players!' : mode==='find' ? '🔎 Which game do you need players for?' : '🙋 Choose a game and rank to be available for 2 hours.',[gameMenu(mode,store),home()]);
   }
-  if (action==='help') return reply('Pick a game, then tap Notify me or Find a teammate. That’s it!');
+  if (action==='help') return reply('Pick a game, browse open teams, then tap Join. Start a team if you want to host.');
   if (action==='game') {
     if (!GAMES[value] || !['register','find'].includes(a)) throw userError('Invalid selection.');
     return reply(`${GAMES[value].emoji} **${GAMES[value].name}**\n${a==='find'?'Choose the rank you want to play with.':'Choose your rank. You can change it later.'}`,[ranks(a,value),home()]);

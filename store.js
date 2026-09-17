@@ -110,5 +110,6 @@ export class Store {
     this.db.prepare('DELETE FROM requests WHERE expires<?').run(this.now()-86_400_000);
     this.db.prepare('DELETE FROM pings WHERE time<?').run(this.now()-86_400_000);
   }
+  openTeams(game) { return this.recent().filter(r=>r.status==='open' && r.expires>this.now() && (!game || r.game===game)); }
   recent() { return this.db.prepare('SELECT id FROM requests WHERE message IS NOT NULL').all().map(r => this.request(r.id)); }
 }

@@ -78,9 +78,9 @@ test('database survives restart with registrations and usable request IDs',()=>{
     s=new Store(path);assert.equal(s.active().length,1);assert.equal(s.join(r.id,'u').status,'full');s.db.close();
   } finally {rmSync(dir,{recursive:true,force:true});}
 });
-test('English Discord payloads serialize within component limits and count unique people',t=>{
+test('English Discord payloads serialize within component limits and count open teams',t=>{
   const {store:s}=fixture(t);s.register('u','chess','1',0);s.register('u','rocket','1',0);
-  const p=panel(s);assert.match(p.components[1].toJSON().components[0].label,/1 ready/);
+  const p=panel(s);assert.match(p.components[1].toJSON().components[0].label,/0 open/);
   assert.ok(p.embeds[0].toJSON().description.length<4096);
   for(const game of Object.keys(GAMES)) for(const mode of ['register','find']) {
     assert.ok(ranks(mode,game).toJSON().components[0].options.length<=25);
@@ -180,11 +180,11 @@ test('visual replies contain images and buttons with functional links, no prose'
  assert.equal(payload.components[0].toJSON().components[0].url,'https://discord.com/channels/1/2/3');
  assert.ok(Buffer.isBuffer(payload.files[0].attachment));
 });
-test('live count image changes on registration and returns after removal',async t=>{
+test('live count image tracks open teams and removes closed teams',async t=>{
  const {liveImage}=await import('./visual.js');const {GAMES}=await import('./games.js');const {store}=fixture(t);
- const empty=await liveImage(store,GAMES);store.register('u','rocket','0',0);
+ const empty=await liveImage(store,GAMES);const r=store.create('u','rocket','any',1);store.publish(r.id,'m');
  const ready=await liveImage(store,GAMES);assert.notDeepEqual(ready,empty);
- store.remove('u','rocket');assert.deepEqual(await liveImage(store,GAMES),empty);
+ store.close(r.id);assert.deepEqual(await liveImage(store,GAMES),empty);
 });
 
 test('balanced replies use images only for navigation and preserve mention text',async()=>{
@@ -194,7 +194,7 @@ test('balanced replies use images only for navigation and preserve mention text'
  assert.equal(p.files.length,0);assert.match(p.embeds[0].toJSON().description,/<@123>.*<#456>/);
  assert.deepEqual(p.allowedMentions,{parse:[]});
  }
- const menu=await replyPayload('pick:rocket',{content:'Choose an action',components:[]});assert.equal(menu.files.length,1);
+ const menu=await replyPayload('home',{content:'Choose an action',components:[]});assert.equal(menu.files.length,1);
 });
 
 test('find recommends existing casual team and joins without a duplicate invite',async t=>{
@@ -211,10 +211,12 @@ test('find returns owner to existing invite',async t=>{
  assert.match(out.content,/guild\/chat\/message/);assert.equal(store.recent().length,1);
 });
 
-test('game choices adapt to ready status and owned invites',async t=>{
+test('team board shows join cards and simple empty state',async t=>{
  const {store}=fixture(t);let out;const i={user:{id:'u'},guildId:'g',customId:'pick:chess',editReply:async p=>{out=p;}};const ctx={store,match:{id:'c'}};
- await handle(i,ctx);assert.equal(out.components[0].toJSON().components[0].label,'Notify me');
- store.register('u','chess','0',0);await handle(i,ctx);assert.equal(out.components[0].toJSON().components[0].custom_id,'remove:chess');
- const r=store.create('u','chess','any',1);store.publish(r.id,'m');await handle(i,ctx);
- assert.equal(out.components[0].toJSON().components[1].url,'https://discord.com/channels/g/c/m');
+ await handle(i,ctx);assert.equal(out.components[0].toJSON().components[0].label,'Start a team');
+ for(let n=0;n<4;n++){const r=store.create('host'+n,'chess','any',1);store.publish(r.id,'m'+n);}
+ await handle(i,ctx);assert.equal(out.embeds.length,3);assert.equal(out.components[0].toJSON().components.length,3);
+ assert.match(out.embeds[0].toJSON().description,/<@host/);
+ await handle({...i,customId:'pick:chess:1'},ctx);assert.equal(out.embeds.length,1);assert.match(out.embeds[0].toJSON().title,/Team 4/);
+ assert.ok(!JSON.stringify(out).includes('Notify me'));
 });

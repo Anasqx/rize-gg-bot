@@ -26,11 +26,11 @@ export function size(game, rank) {
   return row(new StringSelectMenuBuilder().setCustomId(`size:${game}:${rank}`).setPlaceholder('How many players do you need?').addOptions(
     Array.from({length:GAMES[game].max},(_,i) => ({label:`${ar(i+1)} player(s)`,value:String(i+1)}))));
 }
-export const gameButtons = store => row(...Object.entries(GAMES).map(([key,g])=>button(`pick:${key}`,`${g.emoji} ${g.name} · ${ar(store.active(key).length)}`)));
+export const gameButtons = store => row(...Object.entries(GAMES).map(([key,g])=>button(`pick:${key}`,`${g.emoji} ${g.name} · ${ar(store.openTeams(key).length)}`)));
 export function panel(store) {
-  const total = new Set(store.active().map(a=>a.user)).size;
-  return {embeds:[embed('Find your team','Choose a game below, then get notified or find a player.\nThe number beside each game shows players ready now.').setImage('attachment://lfg-banner.png')],
-    components:[gameButtons(store),row(button('games',`Games · ${ar(total)} ready`),button('mine','My status'))],allowedMentions:{parse:[]}};
+  const total = store.openTeams().length;
+  return {embeds:[embed('Find your team','Choose a game, browse teams, and join.\nThe number beside each game shows open teams.').setImage('attachment://lfg-banner.png')],
+    components:[gameButtons(store),row(button('games',`Teams · ${ar(total)} open`),button('myteams','My team'))],allowedMentions:{parse:[]}};
 }
 export function requestView(r) {
   const g = GAMES[r.game];

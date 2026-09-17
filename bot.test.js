@@ -210,3 +210,11 @@ test('find returns owner to existing invite',async t=>{
  await handle({user:{id:'host'},guildId:'guild',customId:'quickfind:chess',editReply:async p=>{out=p;}},{store,match:{id:'chat'}});
  assert.match(out.content,/guild\/chat\/message/);assert.equal(store.recent().length,1);
 });
+
+test('game choices adapt to ready status and owned invites',async t=>{
+ const {store}=fixture(t);let out;const i={user:{id:'u'},guildId:'g',customId:'pick:chess',editReply:async p=>{out=p;}};const ctx={store,match:{id:'c'}};
+ await handle(i,ctx);assert.equal(out.components[0].toJSON().components[0].label,'Notify me');
+ store.register('u','chess','0',0);await handle(i,ctx);assert.equal(out.components[0].toJSON().components[0].custom_id,'remove:chess');
+ const r=store.create('u','chess','any',1);store.publish(r.id,'m');await handle(i,ctx);
+ assert.equal(out.components[0].toJSON().components[1].url,'https://discord.com/channels/g/c/m');
+});

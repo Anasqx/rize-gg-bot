@@ -4,6 +4,7 @@ import { GAMES, ar, rankName } from './games.js';
 export const MARKER = 'Rize.gg • Find your team';
 export const row = (...components) => new ActionRowBuilder().addComponents(...components);
 export const button = (id, label, style = ButtonStyle.Secondary) => new ButtonBuilder().setCustomId(id).setLabel(label).setStyle(style);
+export const linkButton = (label,url) => new ButtonBuilder().setLabel(label).setStyle(ButtonStyle.Link).setURL(url);
 export const stamp = ms => `<t:${Math.floor(ms/1000)}:R>`;
 export const embed = (title, description) => new EmbedBuilder().setColor(0x99F9EA).setTitle(title).setDescription(description).setFooter({ text: MARKER });
 export const privateView = (content, components = [], embeds = []) => ({ content, components, embeds, allowedMentions: { parse: [] } });
@@ -37,7 +38,7 @@ export function requestView(r) {
   const remaining=Math.max(0,r.needed-r.players.length);
   const open=r.status==='open';
   const e=embed(`${g.emoji} ${g.name} • ${status}`,
-    open ? `<@${r.owner}> is looking for a teammate.\n**Want in? Tap Join team below.**` : r.status==='full' ? `Team complete! <@${r.owner}>, you’re ready to play.` : `<@${r.owner}>’s invite has ended.`)
+    open ? `**Your next game starts here.**\nJoin <@${r.owner}> — ${remaining} ${remaining===1?'spot':'spots'} open.\nTap **Join team** to save your place.` : r.status==='full' ? `Team complete! <@${r.owner}>, you’re ready to play.` : `<@${r.owner}>’s invite has ended.`)
     .setColor(open?0x99F9EA:r.status==='full'?0xA697EB:0x73818C)
     .addFields(
       {name:'🎮 Mode',value:r.rank==='any'?'Casual · any rank':rankName(r.game,r.rank),inline:true},

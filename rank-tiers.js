@@ -16,3 +16,11 @@ export function rankProgress(account){
  const earned=RANK_TIERS.filter(t=>chat>=t.chat&&voice>=t.voice);
  return {chat,voice,earned,current:earned.at(-1),next:RANK_TIERS[earned.length]};
 }
+export function displayedRankProgress(account,memberRoles){
+ const progress=rankProgress(account);
+ const highestRoleIndex=RANK_TIERS.reduce((highest,tier,index)=>
+  memberRoles.some(role=>role.name===tier.name)?index:highest,-1);
+ const highestLevelIndex=progress.earned.length-1;
+ const index=Math.max(highestLevelIndex,highestRoleIndex);
+ return {...progress,current:index>=0?RANK_TIERS[index]:undefined,next:RANK_TIERS[index+1]};
+}

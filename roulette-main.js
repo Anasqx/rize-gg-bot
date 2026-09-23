@@ -1,4 +1,4 @@
-import {Client,GatewayIntentBits,Events,MessageFlags,EmbedBuilder} from 'discord.js';
+import {Client,GatewayIntentBits,Events,MessageFlags,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle} from 'discord.js';
 import {Store} from './store.js';
 import {Rewards} from './rewards.js';
 import {syncRanks,rankStatus} from './rank-sync.js';
@@ -46,6 +46,7 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  }
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
+ console.log('RELEASE_READY: polished-v3; confirmed spins and admin awards');
  console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals active; XP uses normal rates');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));
 // Listen to raw member events so uncached members also receive tag updates.
@@ -65,7 +66,7 @@ client.on(Events.VoiceStateUpdate,(oldState,newState)=>{if(newState.guild.id===e
 client.on(Events.MessageCreate,m=>{if(ready&&m.guildId===env.GUILD_ID&&!m.author.bot&&!m.webhookId)enqueue(()=>awardActivity(m.guild,m.author.id,'chat')).catch(log);});
 client.on(Events.InteractionCreate,async i=>{if(i.guildId!==env.GUILD_ID||(!i.isButton()&&!i.isAnySelectMenu()))return;
  try{if(i.message.flags.has(MessageFlags.Ephemeral))await i.deferUpdate();else await i.deferReply({flags:MessageFlags.Ephemeral});
- await enqueue(async()=>{try{if(!ready)throw Object.assign(Error('البوت يبدأ الآن، جرّب بعد لحظات.'),{userFacing:true});await handleRewards(i,rewards);if(i.customId==='reward:role')await refresh();}catch(e){if(!e.userFacing)log(e);await i.editReply({content:e.userFacing?e.message:'صار خطأ. جرّب مرة ثانية أو تواصل مع الإدارة.',embeds:[],components:[],attachments:[],allowedMentions:{parse:[]}});}});
+ await enqueue(async()=>{try{if(!ready)throw Object.assign(Error('البوت يبدأ الآن، جرّب بعد لحظات.'),{userFacing:true});await handleRewards(i,rewards);if(i.customId==='reward:role')await refresh();}catch(e){if(!e.userFacing)log(e);await i.editReply({content:e.userFacing?e.message:'صار خطأ. جرّب مرة ثانية أو تواصل مع الإدارة.',embeds:[],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('reward:balance').setLabel('رصيدي وجوائزي').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('reward:home').setLabel('رجوع للعجلة').setStyle(ButtonStyle.Secondary))],attachments:[],allowedMentions:{parse:[]}});}});
  }catch(e){log(e);}});
 client.on(Events.Error,log);
 async function stop(){clearInterval(timer);client.destroy();await queue;await Promise.allSettled([...tagJobs.values()]);store.db.close();process.exit(0);}process.once('SIGTERM',stop);process.once('SIGINT',stop);

@@ -2,6 +2,7 @@ import {Client,GatewayIntentBits,Events,MessageFlags,EmbedBuilder} from 'discord
 import {Store} from './store.js';
 import {Rewards} from './rewards.js';
 import {syncRanks,rankStatus} from './rank-sync.js';
+import {syncTag} from './tag-rewards.js';
 import {panel,handleRewards} from './roulette-ui.js';
 const env=process.env;
 for(const k of ['DISCORD_TOKEN','GUILD_ID','PANEL_CHANNEL_ID'])if(!env[k])throw Error(`Missing ${k}`);
@@ -10,12 +11,13 @@ const store=new Store(env.DATABASE_PATH||'./data/rize.sqlite');
 if(store.get('guild')&&store.get('guild')!==env.GUILD_ID)throw Error('Guild mismatch');store.set('guild',env.GUILD_ID);
 store.set('rewards:leveling','internal');
 if(env.REWARDS_ROLE_ID&&!store.get('rewards:role'))store.set('rewards:role',env.REWARDS_ROLE_ID);
+let tagCursor='';
 const voiceSince=new Map();
 const lastRankCheck=new Map();
 async function awardActivity(guild,user,kind){
  rewards.activity(user,kind);
  const now=Date.now();if(now-(lastRankCheck.get(user)||0)<60000)return;
- lastRankCheck.set(user,now);await syncRanks(guild,rewards,user);
+ lastRankCheck.set(user,now);await syncTag(guild,rewards,user).catch(log);await syncRanks(guild,rewards,user);
 }
 const rewards=new Rewards(store);let ready=false,channel,timer;let queue=Promise.resolve();
 const enqueue=work=>{const job=queue.then(work);queue=job.catch(()=>{});return job;};
@@ -34,6 +36,11 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  const eligible=new Set();
  for(const c of guild.channels.cache.values())if(c.isVoiceBased()&&c.id!==guild.afkChannelId){const members=[...c.members.values()].filter(m=>!m.user.bot&&!m.voice.selfMute&&!m.voice.serverMute&&!m.voice.selfDeaf&&!m.voice.serverDeaf);if(members.length>=2)for(const m of members){eligible.add(m.id);if(!voiceSince.has(m.id))voiceSince.set(m.id,Date.now());else if(Date.now()-voiceSince.get(m.id)>=60000)await awardActivity(guild,m.id,'voice');}}
  for(const id of voiceSince.keys())if(!eligible.has(id))voiceSince.delete(id);
+ if(store.get('tag:role')){
+  const batch=rewards.db.prepare('SELECT user FROM reward_accounts WHERE user>? ORDER BY user LIMIT 10').all(tagCursor);
+  for(const item of batch){await syncTag(guild,rewards,item.user).catch(log);tagCursor=item.user;}
+  if(batch.length<10)tagCursor='';
+ }
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));

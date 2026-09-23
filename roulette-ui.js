@@ -16,7 +16,7 @@ function getConfirmation(user,action,token){const c=confirmations.get(token);ret
 const controls=()=>[row(btn('reward:spin','🎡 لف العجلة',ButtonStyle.Success),btn('reward:balance','🎟️ رصيدي'))];
 const home=()=>row(btn('reward:home','رجوع للعجلة'));
 export const isAdmin=i=>i.memberPermissions?.has(PermissionFlagsBits.ManageGuild);
-export function panel(rewards){const role=rewards.store.get('rewards:role');return {content:'',embeds:[card('عجلة Rize.gg',`شارك بالشات والفويس واجمع تذاكر المكافآت.\n**كل ٥ مستويات مشتركة = تذكرة • كل لفة = تذكرة**\n${role?`المشاركة لأصحاب رتبة <@&${role}>.`:'العجلة مقفلة حتى تحدد الإدارة رتبة المشاركة.'}\nاضغط «لف العجلة» للبدء، أو «رصيدي» لمتابعة تقدمك.\nالميزات دائمة داخل السيرفر. جميع الجوائز تُسلّم عن طريق الإدارة.`).setImage('attachment://roulette.png')],files:[file('roulette.png')],attachments:[],components:[...controls(),row(btn('reward:admin','إعدادات الإدارة'))],allowedMentions:{parse:[]}};}
+export function panel(rewards){return {content:'',embeds:[new EmbedBuilder().setColor(0x99f9ea).setImage('attachment://roulette.png')],files:[file('roulette.png')],attachments:[],components:[...controls(),row(btn('reward:admin','إعدادات الإدارة'))],allowedMentions:{parse:[]}};}
 export async function handleRewards(i,rewards){const [prefix,action,arg]=i.customId.split(':');const user=i.user.id;
  const reply=(title,text,components=[home()])=>i.editReply({content:'',embeds:[card(title,text)],attachments:[],components,allowedMentions:{parse:[]}});
  if(prefix!=='reward')return reply('تم تحديث البوت','البوت صار مخصص لعجلة المكافآت. استخدم اللوحة الجديدة.');

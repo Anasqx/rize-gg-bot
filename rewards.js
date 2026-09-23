@@ -17,7 +17,10 @@ export class Rewards {
  this.db.exec(`CREATE TABLE IF NOT EXISTS reward_accounts(user TEXT PRIMARY KEY,tickets INTEGER NOT NULL DEFAULT 0 CHECK(tickets>=0),xp INTEGER NOT NULL DEFAULT 0,milestones INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS reward_claims(id TEXT PRIMARY KEY,nonce TEXT UNIQUE,user TEXT,prize TEXT,cash INTEGER,month TEXT,status TEXT DEFAULT 'pending',created INTEGER,admin TEXT);
  CREATE TABLE IF NOT EXISTS reward_grants(nonce TEXT PRIMARY KEY,user TEXT,admin TEXT,amount INTEGER,created INTEGER);
- CREATE TABLE IF NOT EXISTS reward_activity(user TEXT,day TEXT,total INTEGER DEFAULT 0,last_chat INTEGER DEFAULT 0,last_voice INTEGER DEFAULT 0,PRIMARY KEY(user,day));`);}
+ CREATE TABLE IF NOT EXISTS reward_activity(user TEXT,day TEXT,total INTEGER DEFAULT 0,last_chat INTEGER DEFAULT 0,last_voice INTEGER DEFAULT 0,PRIMARY KEY(user,day));`);
+ const columns=new Set(this.db.prepare('PRAGMA table_info(reward_accounts)').all().map(c=>c.name));
+ for(const name of ['chat_xp','voice_xp'])if(!columns.has(name))this.db.exec(`ALTER TABLE reward_accounts ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
+ }
  account(user){this.db.prepare('INSERT OR IGNORE INTO reward_accounts(user) VALUES(?)').run(user);return this.db.prepare('SELECT * FROM reward_accounts WHERE user=?').get(user);}
  month(){return new Date(this.now()+3*3600000).toISOString().slice(0,7);}
  spent(){return this.db.prepare('SELECT COALESCE(SUM(cash),0) AS n FROM reward_claims WHERE month=?').get(this.month()).n;}
@@ -33,11 +36,12 @@ export class Rewards {
  claims(user){return this.db.prepare('SELECT * FROM reward_claims WHERE user=? ORDER BY created DESC LIMIT 10').all(user);}
  pending(){return this.db.prepare("SELECT * FROM reward_claims WHERE status='pending' ORDER BY created LIMIT 5").all();}
  fulfill(id,admin){return this.db.prepare("UPDATE reward_claims SET status='delivered',admin=? WHERE id=? AND status='pending'").run(admin,id);}
- activity(user,kind){if(this.store.get('rewards:leveling')!=='internal')return;const now=this.now(),day=new Date(now+3*3600000).toISOString().slice(0,10);const field=kind==='chat'?'last_chat':'last_voice';this.db.exec('BEGIN IMMEDIATE');try{
+ activity(user,kind){if(this.store.get('rewards:leveling')!=='internal')return;if(!['chat','voice'].includes(kind))throw Error('Invalid XP source');const now=this.now(),day=new Date(now+3*3600000).toISOString().slice(0,10);const field=kind==='chat'?'last_chat':'last_voice';this.db.exec('BEGIN IMMEDIATE');try{
  this.db.prepare('INSERT OR IGNORE INTO reward_activity(user,day) VALUES(?,?)').run(user,day);const a=this.db.prepare('SELECT * FROM reward_activity WHERE user=? AND day=?').get(user,day);
  if(now-a[field]<60000||a.total>=600){this.db.exec('COMMIT');return;}
  const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=Math.floor(level(p.xp+amount).level/5);
  this.db.prepare(`UPDATE reward_activity SET total=total+?,${field}=? WHERE user=? AND day=?`).run(amount,now,user,day);
- this.db.prepare('UPDATE reward_accounts SET xp=xp+?,tickets=tickets+?,milestones=? WHERE user=?').run(amount,Math.max(0,milestones-p.milestones),milestones,user);
+ const xpField=kind==='chat'?'chat_xp':'voice_xp';
+ this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-p.milestones),milestones,user);
  this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }

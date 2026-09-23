@@ -40,7 +40,7 @@ export class Rewards {
  activity(user,kind){if(this.store.get('rewards:leveling')!=='internal')return;if(!['chat','voice'].includes(kind))throw Error('Invalid XP source');const now=this.now(),day=new Date(now+3*3600000).toISOString().slice(0,10);const field=kind==='chat'?'last_chat':'last_voice';this.db.exec('BEGIN IMMEDIATE');try{
  this.db.prepare('INSERT OR IGNORE INTO reward_activity(user,day) VALUES(?,?)').run(user,day);const a=this.db.prepare('SELECT * FROM reward_activity WHERE user=? AND day=?').get(user,day);
  if(now-a[field]<60000||a.total>=600){this.db.exec('COMMIT');return;}
- const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=Math.floor(level(p.xp+amount).level/5);
+ const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=level(p.xp+amount).level;
  this.db.prepare(`UPDATE reward_activity SET total=total+?,${field}=? WHERE user=? AND day=?`).run(amount,now,user,day);
  const xpField=kind==='chat'?'chat_xp':'voice_xp';
  this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-p.milestones),milestones,user);

@@ -17,7 +17,7 @@ export async function syncTag(guild,rewards,userId){
   if(!member.roles.cache.has(id)){await member.roles.add(id,'Rize.gg: عرض تاق السيرفر');rewards.store.set(owned,'yes');}
   return 'التاق مفعّل ورتبته موجودة.';
  }
- if(rewards.store.get(owned)==='yes'){
+ if(member.roles.cache.has(id)||rewards.store.get(owned)==='yes'){
   if(member.roles.cache.has(id))await member.roles.remove(id,'Rize.gg: إزالة تاق السيرفر');rewards.store.set(owned,'no');
  }
  return 'تاق هذا السيرفر غير ظاهر عند العضو.';

@@ -36,10 +36,11 @@ export class Rewards {
  claims(user){return this.db.prepare('SELECT * FROM reward_claims WHERE user=? ORDER BY created DESC LIMIT 10').all(user);}
  pending(){return this.db.prepare("SELECT * FROM reward_claims WHERE status='pending' ORDER BY created LIMIT 5").all();}
  fulfill(id,admin){return this.db.prepare("UPDATE reward_claims SET status='delivered',admin=? WHERE id=? AND status='pending'").run(admin,id);}
- activity(user,kind){if(this.store.get('rewards:leveling')!=='internal')return;if(!['chat','voice'].includes(kind))throw Error('Invalid XP source');const now=this.now(),day=new Date(now+3*3600000).toISOString().slice(0,10);const field=kind==='chat'?'last_chat':'last_voice';this.db.exec('BEGIN IMMEDIATE');try{
+ canEarn(user,kind){const day=new Date(this.now()+3*3600000).toISOString().slice(0,10);const a=this.db.prepare('SELECT * FROM reward_activity WHERE user=? AND day=?').get(user,day);return !a||(a.total<600&&this.now()-a[kind==='chat'?'last_chat':'last_voice']>=60000);}
+ activity(user,kind,multiplier=1){if(![1,2].includes(multiplier))throw Error('Invalid XP multiplier');if(this.store.get('rewards:leveling')!=='internal')return;if(!['chat','voice'].includes(kind))throw Error('Invalid XP source');const now=this.now(),day=new Date(now+3*3600000).toISOString().slice(0,10);const field=kind==='chat'?'last_chat':'last_voice';this.db.exec('BEGIN IMMEDIATE');try{
  this.db.prepare('INSERT OR IGNORE INTO reward_activity(user,day) VALUES(?,?)').run(user,day);const a=this.db.prepare('SELECT * FROM reward_activity WHERE user=? AND day=?').get(user,day);
  if(now-a[field]<60000||a.total>=600){this.db.exec('COMMIT');return;}
- const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=Math.floor(level(p.xp+amount).level/5);
+ const amount=Math.min((kind==='chat'?15:10)*multiplier,600-a.total),p=this.account(user),milestones=Math.floor(level(p.xp+amount).level/5);
  this.db.prepare(`UPDATE reward_activity SET total=total+?,${field}=? WHERE user=? AND day=?`).run(amount,now,user,day);
  const xpField=kind==='chat'?'chat_xp':'voice_xp';
  this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-p.milestones),milestones,user);

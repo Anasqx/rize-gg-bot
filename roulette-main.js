@@ -2,11 +2,11 @@ import {Client,GatewayIntentBits,Events,MessageFlags,EmbedBuilder} from 'discord
 import {Store} from './store.js';
 import {Rewards} from './rewards.js';
 import {syncRanks,rankStatus} from './rank-sync.js';
-import {syncTag} from './tag-rewards.js';
+import {syncTag,hasServerTag} from './tag-rewards.js';
 import {panel,handleRewards} from './roulette-ui.js';
 const env=process.env;
 for(const k of ['DISCORD_TOKEN','GUILD_ID','PANEL_CHANNEL_ID'])if(!env[k])throw Error(`Missing ${k}`);
-const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates]});
+const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates]});
 const store=new Store(env.DATABASE_PATH||'./data/rize.sqlite');
 if(store.get('guild')&&store.get('guild')!==env.GUILD_ID)throw Error('Guild mismatch');store.set('guild',env.GUILD_ID);
 store.set('rewards:leveling','internal');
@@ -15,10 +15,14 @@ let tagCursor='';
 const voiceSince=new Map();
 const lastRankCheck=new Map();
 async function awardActivity(guild,user,kind){
- rewards.activity(user,kind);
+ if(!rewards.canEarn(user,kind))return;
+ let multiplier=1;
+ try{await syncTag(guild,rewards,user);if(store.get('tag:role')&&hasServerTag(client.users.cache.get(user)||{},guild.id))multiplier=2;}catch(e){log(e);}
+ rewards.activity(user,kind,multiplier);
  const now=Date.now();if(now-(lastRankCheck.get(user)||0)<60000)return;
- lastRankCheck.set(user,now);await syncTag(guild,rewards,user).catch(log);await syncRanks(guild,rewards,user);
+ lastRankCheck.set(user,now);await syncRanks(guild,rewards,user);
 }
+
 const rewards=new Rewards(store);let ready=false,channel,timer;let queue=Promise.resolve();
 const enqueue=work=>{const job=queue.then(work);queue=job.catch(()=>{});return job;};
 const log=e=>console.error('تعذرت العملية:',e.code||e.name||'خطأ');
@@ -43,7 +47,21 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  }
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
+ console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals and double XP active');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));
+// Listen to raw member events so uncached members also receive tag updates.
+const tagJobs=new Map();
+function scheduleTag(user){
+ if(!ready||!store.get('tag:role'))return;
+ const previous=tagJobs.get(user)||Promise.resolve();
+ const job=previous.catch(()=>{}).then(()=>syncTag(client.guilds.cache.get(env.GUILD_ID),rewards,user)).catch(log);
+ tagJobs.set(user,job);job.finally(()=>{if(tagJobs.get(user)===job)tagJobs.delete(user);});
+}
+client.on(Events.Raw,packet=>{
+ if(packet.d?.guild_id!==env.GUILD_ID)return;
+ if(packet.t==='GUILD_MEMBER_ADD'||(packet.t==='GUILD_MEMBER_UPDATE'&&Object.hasOwn(packet.d.user||{},'primary_guild')))scheduleTag(packet.d.user.id);
+});
+client.on(Events.UserUpdate,(oldUser,newUser)=>{if(JSON.stringify(oldUser.primaryGuild)!==JSON.stringify(newUser.primaryGuild))scheduleTag(newUser.id);});
 client.on(Events.VoiceStateUpdate,(oldState,newState)=>{if(newState.guild.id===env.GUILD_ID)voiceSince.delete(newState.id);});
 client.on(Events.MessageCreate,m=>{if(ready&&m.guildId===env.GUILD_ID&&!m.author.bot&&!m.webhookId)enqueue(()=>awardActivity(m.guild,m.author.id,'chat')).catch(log);});
 client.on(Events.InteractionCreate,async i=>{if(i.guildId!==env.GUILD_ID||(!i.isButton()&&!i.isAnySelectMenu()))return;
@@ -51,5 +69,5 @@ client.on(Events.InteractionCreate,async i=>{if(i.guildId!==env.GUILD_ID||(!i.is
  await enqueue(async()=>{try{if(!ready)throw Object.assign(Error('البوت يبدأ الآن، جرّب بعد لحظات.'),{userFacing:true});await handleRewards(i,rewards);if(i.customId==='reward:role')await refresh();}catch(e){if(!e.userFacing)log(e);await i.editReply({content:e.userFacing?e.message:'صار خطأ. جرّب مرة ثانية أو تواصل مع الإدارة.',embeds:[],components:[],attachments:[],allowedMentions:{parse:[]}});}});
  }catch(e){log(e);}});
 client.on(Events.Error,log);
-async function stop(){clearInterval(timer);client.destroy();await queue;store.db.close();process.exit(0);}process.once('SIGTERM',stop);process.once('SIGINT',stop);
+async function stop(){clearInterval(timer);client.destroy();await queue;await Promise.allSettled([...tagJobs.values()]);store.db.close();process.exit(0);}process.once('SIGTERM',stop);process.once('SIGINT',stop);
 client.login(env.DISCORD_TOKEN).catch(e=>{log(e);process.exitCode=1;});

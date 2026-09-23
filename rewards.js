@@ -25,7 +25,7 @@ export class Rewards {
  spin(user,nonce,roles){const required=this.store.get('rewards:role');if(!required)throw userError('العجلة مقفلة مؤقتًا لين تحدد الإدارة الرتبة المطلوبة.');if(!roles.includes(required))throw userError(`العجلة مخصصة لأصحاب رتبة <@&${required}>.`);
  this.db.exec('BEGIN IMMEDIATE');try{const old=this.db.prepare('SELECT * FROM reward_claims WHERE nonce=?').get(nonce);if(old){if(old.user!==user)throw Error('Nonce mismatch');this.db.exec('COMMIT');return old;}
  if(this.account(user).tickets<1)throw userError('ما عندك تذاكر حاليًا. افتح «رصيدي» لمعرفة طريقة الحصول عليها.');
- let prize=pickPrize(this.draw());if(prize.cash && this.spent()+prize.cash>150)prize=PRIZES.find(p=>p.key==='color');
+ const prize=pickPrize(this.draw());
  const claim={id:randomUUID(),nonce,user,prize:prize.key,cash:prize.cash,month:this.month(),status:'pending',created:this.now()};
  this.db.prepare('INSERT INTO reward_claims(id,nonce,user,prize,cash,month,status,created) VALUES(?,?,?,?,?,?,?,?)').run(...Object.values(claim));
  this.db.prepare('UPDATE reward_accounts SET tickets=tickets-1 WHERE user=?').run(user);this.db.exec('COMMIT');return claim;

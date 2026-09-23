@@ -2,7 +2,7 @@ import {Client,GatewayIntentBits,Events,MessageFlags,EmbedBuilder} from 'discord
 import {Store} from './store.js';
 import {Rewards} from './rewards.js';
 import {syncRanks,rankStatus} from './rank-sync.js';
-import {syncTag,hasServerTag} from './tag-rewards.js';
+import {syncTag} from './tag-rewards.js';
 import {panel,handleRewards} from './roulette-ui.js';
 const env=process.env;
 for(const k of ['DISCORD_TOKEN','GUILD_ID','PANEL_CHANNEL_ID'])if(!env[k])throw Error(`Missing ${k}`);
@@ -16,9 +16,8 @@ const voiceSince=new Map();
 const lastRankCheck=new Map();
 async function awardActivity(guild,user,kind){
  if(!rewards.canEarn(user,kind))return;
- let multiplier=1;
- try{await syncTag(guild,rewards,user);if(store.get('tag:role')&&hasServerTag(client.users.cache.get(user)||{},guild.id))multiplier=2;}catch(e){log(e);}
- rewards.activity(user,kind,multiplier);
+ await syncTag(guild,rewards,user).catch(log);
+ rewards.activity(user,kind);
  const now=Date.now();if(now-(lastRankCheck.get(user)||0)<60000)return;
  lastRankCheck.set(user,now);await syncRanks(guild,rewards,user);
 }
@@ -47,7 +46,7 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  }
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
- console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals and double XP active');
+ console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals active; XP uses normal rates');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));
 // Listen to raw member events so uncached members also receive tag updates.
 const tagJobs=new Map();

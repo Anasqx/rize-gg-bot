@@ -9,6 +9,12 @@ const env=process.env;
 for(const k of ['DISCORD_TOKEN','GUILD_ID','PANEL_CHANNEL_ID'])if(!env[k])throw Error(`Missing ${k}`);
 const client=new Client({intents:[GatewayIntentBits.Guilds,GatewayIntentBits.GuildMembers,GatewayIntentBits.GuildMessages,GatewayIntentBits.GuildVoiceStates]});
 const store=new Store(env.DATABASE_PATH||'./data/rize.sqlite');
+// One-time launch cleanup. It deliberately preserves every setting and Discord role,
+// including the Rize tag role. It only clears members' test progress and prize history.
+if(env.RESET_REWARDS_ON_START==='YES'){
+ store.db.exec('BEGIN IMMEDIATE; DELETE FROM reward_alerts; DELETE FROM reward_grants; DELETE FROM reward_claims; DELETE FROM reward_activity; DELETE FROM reward_accounts; COMMIT;');
+ console.log('REWARDS_RESET_COMPLETE: test progress and prize history cleared; settings and roles preserved');
+}
 if(store.get('guild')&&store.get('guild')!==env.GUILD_ID)throw Error('Guild mismatch');store.set('guild',env.GUILD_ID);
 store.set('rewards:leveling','internal');
 if(env.REWARDS_ROLE_ID&&!store.get('rewards:role'))store.set('rewards:role',env.REWARDS_ROLE_ID);
@@ -49,7 +55,7 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
  await sendPrizeAlerts(guild,rewards).catch(log);
- console.log('RELEASE_READY: launch-v6; persistent prize alerts enabled');
+ console.log('RELEASE_READY: launch-v7; one ticket maximum per level update');
  console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals active; XP uses normal rates');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));
 // Listen to raw member events so uncached members also receive tag updates.

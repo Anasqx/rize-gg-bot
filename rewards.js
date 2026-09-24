@@ -47,6 +47,7 @@ export class Rewards {
  const xpField=kind==='chat'?'chat_xp':'voice_xp';
  // Keep the highest rewarded level even if XP is later reduced or restored.
  const rewardedLevel=Math.max(p.milestones,level(p.xp).level);
- this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-rewardedLevel),Math.max(rewardedLevel,milestones),user);
+ // A single activity update can award at most one ticket, even if it skips levels.
+ this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,milestones>rewardedLevel?1:0,Math.max(rewardedLevel,milestones),user);
  this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }

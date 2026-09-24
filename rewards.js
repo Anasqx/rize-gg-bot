@@ -34,7 +34,7 @@ export class Rewards {
  this.db.prepare('UPDATE reward_accounts SET tickets=tickets-1 WHERE user=?').run(user);this.db.exec('COMMIT');return claim;
  }catch(e){this.db.exec('ROLLBACK');throw e;}}
  claims(user){return this.db.prepare('SELECT * FROM reward_claims WHERE user=? ORDER BY created DESC LIMIT 10').all(user);}
- pending(){return this.db.prepare("SELECT * FROM reward_claims WHERE status='pending' ORDER BY created LIMIT 5").all();}
+ pending(){return this.db.prepare("SELECT * FROM reward_claims WHERE status='pending' ORDER BY created LIMIT 4").all();}
  fulfill(id,admin){return this.db.prepare("UPDATE reward_claims SET status='delivered',admin=? WHERE id=? AND status='pending'").run(admin,id);}
  canEarn(user,kind){const day=new Date(this.now()+3*3600000).toISOString().slice(0,10);const a=this.db.prepare('SELECT * FROM reward_activity WHERE user=? AND day=?').get(user,day);return !a||(a.total<600&&this.now()-a[kind==='chat'?'last_chat':'last_voice']>=60000);}
  activity(user,kind){if(this.store.get('rewards:leveling')!=='internal')return;if(!['chat','voice'].includes(kind))throw Error('Invalid XP source');const now=this.now(),day=new Date(now+3*3600000).toISOString().slice(0,10);const field=kind==='chat'?'last_chat':'last_voice';this.db.exec('BEGIN IMMEDIATE');try{
@@ -43,6 +43,6 @@ export class Rewards {
  const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=level(p.xp+amount).level;
  this.db.prepare(`UPDATE reward_activity SET total=total+?,${field}=? WHERE user=? AND day=?`).run(amount,now,user,day);
  const xpField=kind==='chat'?'chat_xp':'voice_xp';
- this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-p.milestones),milestones,user);
+ this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-level(p.xp).level),milestones,user);
  this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }

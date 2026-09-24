@@ -17,6 +17,7 @@ export class Rewards {
  this.db.exec(`CREATE TABLE IF NOT EXISTS reward_accounts(user TEXT PRIMARY KEY,tickets INTEGER NOT NULL DEFAULT 0 CHECK(tickets>=0),xp INTEGER NOT NULL DEFAULT 0,milestones INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS reward_claims(id TEXT PRIMARY KEY,nonce TEXT UNIQUE,user TEXT,prize TEXT,cash INTEGER,month TEXT,status TEXT DEFAULT 'pending',created INTEGER,admin TEXT);
  CREATE TABLE IF NOT EXISTS reward_grants(nonce TEXT PRIMARY KEY,user TEXT,admin TEXT,amount INTEGER,created INTEGER);
+ CREATE TABLE IF NOT EXISTS reward_rank_grants(user TEXT PRIMARY KEY,level INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS reward_alerts(claim TEXT PRIMARY KEY REFERENCES reward_claims(id),message TEXT);
  CREATE TABLE IF NOT EXISTS reward_activity(user TEXT,day TEXT,total INTEGER DEFAULT 0,last_chat INTEGER DEFAULT 0,last_voice INTEGER DEFAULT 0,PRIMARY KEY(user,day));`);
  const columns=new Set(this.db.prepare('PRAGMA table_info(reward_accounts)').all().map(c=>c.name));
@@ -26,6 +27,14 @@ export class Rewards {
  month(){return new Date(this.now()+3*3600000).toISOString().slice(0,7);}
  spent(){return this.db.prepare('SELECT COALESCE(SUM(cash),0) AS n FROM reward_claims WHERE month=?').get(this.month()).n;}
  grant(user,admin,nonce,amount=1){if(!Number.isInteger(amount)||amount<1||amount>10)throw userError('عدد التذاكر غير صحيح.');this.db.exec('BEGIN IMMEDIATE');try{this.account(user);const done=this.db.prepare('INSERT OR IGNORE INTO reward_grants VALUES(?,?,?,?,?)').run(nonce,user,admin,amount,this.now());if(done.changes)this.db.prepare('UPDATE reward_accounts SET tickets=tickets+? WHERE user=?').run(amount,user);this.db.exec('COMMIT');return this.account(user);}catch(e){this.db.exec('ROLLBACK');throw e;}}
+ rankTickets(user,rankLevel=0){
+  if(!Number.isInteger(rankLevel)||rankLevel<0)throw Error('Invalid rank level');
+  this.db.exec('BEGIN IMMEDIATE');try{this.account(user);const old=this.db.prepare('SELECT level FROM reward_rank_grants WHERE user=?').get(user)?.level||0;const add=Math.max(0,rankLevel-old);
+   if(add)this.db.prepare('UPDATE reward_accounts SET tickets=tickets+? WHERE user=?').run(add,user);
+   this.db.prepare('INSERT INTO reward_rank_grants(user,level) VALUES(?,?) ON CONFLICT(user) DO UPDATE SET level=MAX(level,excluded.level)').run(user,rankLevel);
+   this.db.exec('COMMIT');return {account:this.account(user),added:add};
+  }catch(e){this.db.exec('ROLLBACK');throw e;}
+ }
  spin(user,nonce,roles){const required=this.store.get('rewards:role');if(!required)throw userError('العجلة مقفلة مؤقتًا لين تحدد الإدارة الرتبة المطلوبة.');if(!roles.includes(required))throw userError(`العجلة مخصصة لأصحاب رتبة <@&${required}>.`);
  this.db.exec('BEGIN IMMEDIATE');try{const old=this.db.prepare('SELECT * FROM reward_claims WHERE nonce=?').get(nonce);if(old){if(old.user!==user)throw Error('Nonce mismatch');this.db.exec('COMMIT');return old;}
  if(this.account(user).tickets<1)throw userError('ما عندك تذاكر حاليًا. افتح «رصيدي» لمعرفة طريقة الحصول عليها.');
@@ -45,9 +54,6 @@ export class Rewards {
  const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=level(p.xp+amount).level;
  this.db.prepare(`UPDATE reward_activity SET total=total+?,${field}=? WHERE user=? AND day=?`).run(amount,now,user,day);
  const xpField=kind==='chat'?'chat_xp':'voice_xp';
- // Keep the highest rewarded level even if XP is later reduced or restored.
- const rewardedLevel=Math.max(p.milestones,level(p.xp).level);
- // A single activity update can award at most one ticket, even if it skips levels.
- this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,milestones>rewardedLevel?1:0,Math.max(rewardedLevel,milestones),user);
+ this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,milestones=? WHERE user=?`).run(amount,amount,milestones,user);
  this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }

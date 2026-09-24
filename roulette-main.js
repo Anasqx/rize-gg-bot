@@ -15,6 +15,10 @@ if(env.RESET_REWARDS_ON_START==='YES'){
  store.db.exec('BEGIN IMMEDIATE; DELETE FROM reward_alerts; DELETE FROM reward_grants; DELETE FROM reward_claims; DELETE FROM reward_activity; DELETE FROM reward_accounts; COMMIT;');
  console.log('REWARDS_RESET_COMPLETE: test progress and prize history cleared; settings and roles preserved');
 }
+if(env.RESET_TICKETS_ON_START==='YES'){
+ store.db.exec('BEGIN IMMEDIATE; UPDATE reward_accounts SET tickets=0; DELETE FROM reward_grants; DELETE FROM reward_rank_grants; COMMIT;');
+ console.log('TICKETS_RESET_COMPLETE: ticket balances cleared; tag, ranks, XP, and prize history preserved');
+}
 if(store.get('guild')&&store.get('guild')!==env.GUILD_ID)throw Error('Guild mismatch');store.set('guild',env.GUILD_ID);
 store.set('rewards:leveling','internal');
 if(env.REWARDS_ROLE_ID&&!store.get('rewards:role'))store.set('rewards:role',env.REWARDS_ROLE_ID);

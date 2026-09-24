@@ -3,7 +3,7 @@ import {RANK_TIERS} from './rank-tiers.js';
 export function hasServerTag(user,guildId){const tag=user.primaryGuild;return tag?.identityEnabled===true&&tag.identityGuildId===guildId;}
 export function validateTagRole(role,guild,rewards){
  if(!role||role.id===guild.id||role.managed||!role.editable)throw Error('اختر رتبة عادية تحت رتبة البوت.');
- if(RANK_TIERS.some(t=>t.name===role.name)||role.id===rewards.store.get('rewards:role'))throw Error('استخدم رتبة مستقلة للتاق، غير رتب اللفلات أو دخول العجلة.');
+ if(RANK_TIERS.some(t=>t.id===role.id)||role.id===rewards.store.get('rewards:role'))throw Error('استخدم رتبة مستقلة للتاق، غير رتب اللفلات أو دخول العجلة.');
  const dangerous=['Administrator','ManageGuild','ManageRoles','ManageChannels','KickMembers','BanMembers','ModerateMembers','ManageWebhooks','MentionEveryone','MuteMembers','DeafenMembers','MoveMembers'];
  if(dangerous.some(p=>role.permissions.has(PermissionFlagsBits[p])))throw Error('اختر رتبة تاق بدون صلاحيات إدارية أو تحكم بالأعضاء.');
 }

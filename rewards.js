@@ -43,6 +43,8 @@ export class Rewards {
  const amount=Math.min(kind==='chat'?15:10,600-a.total),p=this.account(user),milestones=level(p.xp+amount).level;
  this.db.prepare(`UPDATE reward_activity SET total=total+?,${field}=? WHERE user=? AND day=?`).run(amount,now,user,day);
  const xpField=kind==='chat'?'chat_xp':'voice_xp';
- this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-level(p.xp).level),milestones,user);
+ // Keep the highest rewarded level even if XP is later reduced or restored.
+ const rewardedLevel=Math.max(p.milestones,level(p.xp).level);
+ this.db.prepare(`UPDATE reward_accounts SET xp=xp+?,${xpField}=${xpField}+?,tickets=tickets+?,milestones=? WHERE user=?`).run(amount,amount,Math.max(0,milestones-rewardedLevel),Math.max(rewardedLevel,milestones),user);
  this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}}
 }

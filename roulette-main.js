@@ -46,7 +46,7 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  }
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
- console.log('RELEASE_READY: launch-v4; one ticket per new level; legacy balances preserved');
+ console.log('RELEASE_READY: launch-v5; persistent highest rewarded level; no repeat level tickets');
  console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals active; XP uses normal rates');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));
 // Listen to raw member events so uncached members also receive tag updates.

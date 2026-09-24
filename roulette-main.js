@@ -1,6 +1,7 @@
 import {Client,GatewayIntentBits,Events,MessageFlags,EmbedBuilder,ActionRowBuilder,ButtonBuilder,ButtonStyle} from 'discord.js';
 import {Store} from './store.js';
 import {Rewards} from './rewards.js';
+import {sendPrizeAlerts} from './prize-alerts.js';
 import {syncRanks,rankStatus} from './rank-sync.js';
 import {syncTag} from './tag-rewards.js';
 import {panel,handleRewards} from './roulette-ui.js';
@@ -36,6 +37,7 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  await refresh();ready=true;
  console.log('حالة رتب المستويات:\n'+await rankStatus(guild));
  timer=setInterval(()=>enqueue(async()=>{
+ await sendPrizeAlerts(guild,rewards).catch(log);
  const eligible=new Set();
  for(const c of guild.channels.cache.values())if(c.isVoiceBased()&&c.id!==guild.afkChannelId){const members=[...c.members.values()].filter(m=>!m.user.bot&&!m.voice.selfMute&&!m.voice.serverMute&&!m.voice.selfDeaf&&!m.voice.serverDeaf);if(members.length>=2)for(const m of members){eligible.add(m.id);if(!voiceSince.has(m.id))voiceSince.set(m.id,Date.now());else if(Date.now()-voiceSince.get(m.id)>=60000)await awardActivity(guild,m.id,'voice');}}
  for(const id of voiceSince.keys())if(!eligible.has(id))voiceSince.delete(id);
@@ -46,7 +48,8 @@ client.once(Events.ClientReady,()=>enqueue(async()=>{
  }
  }).catch(log),60000);
  console.log('Rize.gg: عجلة المكافآت العربية جاهزة.');
- console.log('RELEASE_READY: launch-v5; persistent highest rewarded level; no repeat level tickets');
+ await sendPrizeAlerts(guild,rewards).catch(log);
+ console.log('RELEASE_READY: launch-v6; persistent prize alerts enabled');
  console.log('TAG_LIVE_READY: GuildMembers enabled; tag role grants/removals active; XP uses normal rates');
 }).catch(e=>{log(e);client.destroy();process.exitCode=1;}));
 // Listen to raw member events so uncached members also receive tag updates.
@@ -67,7 +70,7 @@ client.on(Events.MessageCreate,m=>{if(ready&&m.guildId===env.GUILD_ID&&!m.author
 client.on(Events.InteractionCreate,async i=>{if(i.guildId!==env.GUILD_ID||(!i.isButton()&&!i.isAnySelectMenu()))return;
  try{if(i.message.flags.has(MessageFlags.Ephemeral))await i.deferUpdate();else await i.deferReply({flags:MessageFlags.Ephemeral});
  await enqueue(async()=>{try{if(!ready)throw Object.assign(Error('البوت يبدأ الآن، جرّب بعد لحظات.'),{userFacing:true});await handleRewards(i,rewards);if(i.customId==='reward:role')await refresh();}catch(e){if(!e.userFacing)log(e);await i.editReply({content:e.userFacing?e.message:'صار خطأ. جرّب مرة ثانية أو تواصل مع الإدارة.',embeds:[],components:[new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('reward:balance').setLabel('رصيدي وجوائزي').setStyle(ButtonStyle.Secondary),new ButtonBuilder().setCustomId('reward:home').setLabel('رجوع للعجلة').setStyle(ButtonStyle.Secondary))],attachments:[],allowedMentions:{parse:[]}});}});
- }catch(e){log(e);}});
+ }catch(e){log(e);}finally{if(ready&&i.customId?.startsWith('reward:spinconfirm:'))enqueue(()=>sendPrizeAlerts(i.guild,rewards)).catch(log);}});
 client.on(Events.Error,log);
 async function stop(){clearInterval(timer);client.destroy();await queue;await Promise.allSettled([...tagJobs.values()]);store.db.close();process.exit(0);}process.once('SIGTERM',stop);process.once('SIGINT',stop);
 client.login(env.DISCORD_TOKEN).catch(e=>{log(e);process.exitCode=1;});

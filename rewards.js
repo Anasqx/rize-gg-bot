@@ -17,6 +17,7 @@ export class Rewards {
  this.db.exec(`CREATE TABLE IF NOT EXISTS reward_accounts(user TEXT PRIMARY KEY,tickets INTEGER NOT NULL DEFAULT 0 CHECK(tickets>=0),xp INTEGER NOT NULL DEFAULT 0,milestones INTEGER NOT NULL DEFAULT 0);
  CREATE TABLE IF NOT EXISTS reward_claims(id TEXT PRIMARY KEY,nonce TEXT UNIQUE,user TEXT,prize TEXT,cash INTEGER,month TEXT,status TEXT DEFAULT 'pending',created INTEGER,admin TEXT);
  CREATE TABLE IF NOT EXISTS reward_grants(nonce TEXT PRIMARY KEY,user TEXT,admin TEXT,amount INTEGER,created INTEGER);
+ CREATE TABLE IF NOT EXISTS reward_alerts(claim TEXT PRIMARY KEY REFERENCES reward_claims(id),message TEXT);
  CREATE TABLE IF NOT EXISTS reward_activity(user TEXT,day TEXT,total INTEGER DEFAULT 0,last_chat INTEGER DEFAULT 0,last_voice INTEGER DEFAULT 0,PRIMARY KEY(user,day));`);
  const columns=new Set(this.db.prepare('PRAGMA table_info(reward_accounts)').all().map(c=>c.name));
  for(const name of ['chat_xp','voice_xp'])if(!columns.has(name))this.db.exec(`ALTER TABLE reward_accounts ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
@@ -31,6 +32,7 @@ export class Rewards {
  const prize=pickPrize(this.draw());
  const claim={id:randomUUID(),nonce,user,prize:prize.key,cash:prize.cash,month:this.month(),status:'pending',created:this.now()};
  this.db.prepare('INSERT INTO reward_claims(id,nonce,user,prize,cash,month,status,created) VALUES(?,?,?,?,?,?,?,?)').run(...Object.values(claim));
+ this.db.prepare('INSERT INTO reward_alerts(claim) VALUES(?)').run(claim.id);
  this.db.prepare('UPDATE reward_accounts SET tickets=tickets-1 WHERE user=?').run(user);this.db.exec('COMMIT');return claim;
  }catch(e){this.db.exec('ROLLBACK');throw e;}}
  claims(user){return this.db.prepare('SELECT * FROM reward_claims WHERE user=? ORDER BY created DESC LIMIT 10').all(user);}
